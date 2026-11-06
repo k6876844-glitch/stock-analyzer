@@ -390,7 +390,7 @@ function detail(m) {
     <div>
       <span class="ticker-badge">NSE: ${esc(m.symbol)}</span>
       <h3>${esc(m.name)}</h3>
-      <div class="sub">${esc(m.sector || "—")} · ${esc(m.industry || "—")}</div>
+      <div class="sub">${esc([m.sector, m.industry].filter(Boolean).join(" · ") || "—")}</div>
       <div class="price num">${money(p)}<small>market cap ${money(m.market_cap)}</small></div>
     </div>
     <div>
