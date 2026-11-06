@@ -6,6 +6,7 @@
 
 GET /api/analyze?symbols=SCOM,EQTY  ->  {"results": [...], "errors": {...}}
 GET /api/nse/list                   ->  every NSE listing with today's price
+GET /api/health                     ->  deployed commit + connectivity to the data sources
 """
 import json
 import os
@@ -39,6 +40,11 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         url = urlparse(self.path)
+        if url.path == "/api/health":
+            return self._json(200, {
+                "commit": os.environ.get("RENDER_GIT_COMMIT", "local"),
+                "network": nse.diagnose(),
+            })
         if url.path == "/api/nse/list":
             try:
                 return self._json(200, {"stocks": nse.list_stocks()})

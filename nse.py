@@ -31,10 +31,12 @@ SYMBOL_RE = re.compile(r"^[A-Z0-9]{1,10}$")
 
 CONNECT_TIMEOUT = 5   # per address; the source hosts publish 4-6 addresses each
 READ_TIMEOUT = 20
+CONNECT_BUDGET = 12  # seconds across all addresses of one host
 
 
 def _connect(address, timeout=None, source_address=None, **kw):
-    """Like socket.create_connection, but IPv4 first and a short timeout per address.
+    """Like socket.create_connection, but IPv4 first, a short timeout per address and
+    a cap on the total time spent connecting.
 
     The stock version tries every DNS address in turn with the full timeout, so a host
     with six addresses that the server can't reach (common for IPv6 on cloud hosts)
@@ -43,20 +45,50 @@ def _connect(address, timeout=None, source_address=None, **kw):
     host, port = address
     infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
     infos.sort(key=lambda i: i[0] != socket.AF_INET)
-    err = None
+    deadline = time.time() + CONNECT_BUDGET
+    errors = []
     for family, socktype, proto, _, addr in infos:
+        left = deadline - time.time()
+        if left <= 0:
+            break
         sock = socket.socket(family, socktype, proto)
         try:
-            sock.settimeout(CONNECT_TIMEOUT)
+            sock.settimeout(min(CONNECT_TIMEOUT, left))
             if source_address:
                 sock.bind(source_address)
             sock.connect(addr)
             sock.settimeout(timeout)
             return sock
         except OSError as e:
-            err = e
+            errors.append(f"{addr[0]}: {e}")
             sock.close()
-    raise err or OSError(f"no addresses for {host}")
+    raise OSError(f"can't connect to {host}: " + "; ".join(errors or ["no addresses"]))
+
+
+def diagnose(hosts=("afx.kwayisi.org", "stockanalysis.com")):
+    """Test DNS and a TCP connect to every address of each source host."""
+    out = {}
+    for host in hosts:
+        t = time.time()
+        try:
+            infos = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+        except OSError as e:
+            out[host] = {"dns_error": str(e), "dns_s": round(time.time() - t, 2)}
+            continue
+        res = {"dns_s": round(time.time() - t, 2), "addresses": {}}
+        for family, socktype, proto, _, addr in infos:
+            sock = socket.socket(family, socktype, proto)
+            sock.settimeout(4)
+            t = time.time()
+            try:
+                sock.connect(addr)
+                res["addresses"][addr[0]] = f"ok {time.time() - t:.2f}s"
+            except OSError as e:
+                res["addresses"][addr[0]] = f"{e!r} after {time.time() - t:.1f}s"
+            finally:
+                sock.close()
+        out[host] = res
+    return out
 
 
 class _HTTPSConnection(http.client.HTTPSConnection):
