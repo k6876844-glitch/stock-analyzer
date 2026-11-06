@@ -259,13 +259,19 @@ def _mystocks_price(sym):
         return _n(m.group(1)) if m else None
 
     d = re.search(r'<meta name=description content="([^"]*?) \(' + re.escape(sym) + r'\), Sector: ([^,]*),', page)
+    # live-quote JSON: [price, change, prev, ..., volume, turnover, trades, market cap, time, ...]
+    q = re.search(r'\{[^{}]*"data":\[[^\]]*\][^{}]*\}', html.unescape(page))
+    try:
+        mcap = _n(json.loads(q.group())["data"][10]) if q else None
+    except (ValueError, IndexError, KeyError):
+        mcap = None
     price = span("rtPrice")
     if not d or not price:
         raise ValueError(f"no data found for '{sym}'")
     return {
         "name": html.unescape(html.unescape(d.group(1))), "price": price,
         "52w_high": span("rtYrHigh"), "52w_low": span("rtYrLow"),
-        "market_cap": None, "eps": None, "pe": None, "dps": None,  # from stockanalysis.com
+        "market_cap": mcap, "eps": None, "pe": None, "dps": None,  # rest from stockanalysis.com
         "sector": html.unescape(d.group(2)).strip() or None, "industry": None,
     }
 
