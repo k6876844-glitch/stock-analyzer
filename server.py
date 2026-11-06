@@ -80,6 +80,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 def main():
+    nse.LOG = True
     # Hosts like Render set PORT and need the server reachable on all interfaces.
     port = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get("PORT", 8000))
     host = "0.0.0.0" if "PORT" in os.environ else "127.0.0.1"

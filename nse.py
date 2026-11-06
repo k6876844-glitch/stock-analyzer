@@ -36,6 +36,7 @@ UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, 
 PRICE_TTL = 30 * 60          # prices update once per trading session
 FUNDAMENTALS_TTL = 6 * 3600  # statements change a few times a year
 _cache = {}
+LOG = False  # the web server turns this on so fetches show up in the host's logs
 SYMBOL_RE = re.compile(r"^[A-Z0-9]{1,10}$")
 
 
@@ -139,11 +140,16 @@ def _get(url, ttl, data=None, extra_headers=None):
         with _opener.open(req, timeout=READ_TIMEOUT) as r:
             body = r.read().decode("utf-8", errors="replace")
     except Exception as e:
-        print(f"fetch FAILED {url} after {time.time() - t:.1f}s: {e!r}", file=sys.stderr, flush=True)
+        _log(f"fetch FAILED {url} after {time.time() - t:.1f}s: {e!r}")
         raise
-    print(f"fetch {url} {time.time() - t:.1f}s", file=sys.stderr, flush=True)
+    _log(f"fetch {url} {time.time() - t:.1f}s")
     _cache[key] = (time.time(), body)
     return body
+
+
+def _log(msg):
+    if LOG:
+        print(msg, file=sys.stderr, flush=True)
 
 
 def _afx(path):
@@ -272,7 +278,7 @@ def _first(label, *sources):
             return fn()
         except Exception as e:
             errors.append(e)
-            print(f"{label}: {name} failed: {e!r}", file=sys.stderr, flush=True)
+            _log(f"{label}: {name} failed: {e!r}")
     # "ticker not found" from any source beats a network error from a later one
     raise next((e for e in errors if isinstance(e, ValueError)), errors[-1])
 
