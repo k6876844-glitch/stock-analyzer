@@ -1,8 +1,11 @@
 """Nairobi Securities Exchange (Kenya) data.
 
-Two public sources, combined into one record per stock:
-  * afx.kwayisi.org    - live price, 52-week range (from 10y of daily closes), the
-                         full list of NSE tickers
+Public sources, combined into one record per stock:
+  * TradingView scanner - price, day change, 52-week range, sector and the full list
+                          of NSE tickers, all in one request
+  * afx.kwayisi.org     - fallback for prices and the list when TradingView fails or
+                          lacks a ticker (it drops connections from some cloud hosts,
+                          e.g. Render, so after a network failure it is skipped a while)
   * stockanalysis.com  - fundamentals: ratios, margins, balance sheet, 5 years of
                          financial statements, analyst targets
 
@@ -10,6 +13,7 @@ Pages are cached and only fetched when someone asks for a ticker.
 """
 import html
 import http.client
+import json
 import re
 import socket
 import sys
@@ -19,6 +23,12 @@ import urllib.request
 from datetime import date, timedelta
 
 AFX = "https://afx.kwayisi.org"
+TV = "https://scanner.tradingview.com/kenya/scan"
+TV_COLS = ["name", "description", "close", "change", "volume", "price_52_week_high",
+           "price_52_week_low", "market_cap_basic", "sector", "industry",
+           "price_earnings_ttm", "earnings_per_share_basic_ttm"]
+AFX_RETRY = 30 * 60  # after a network failure, leave afx alone this long
+_afx_down_until = 0.0
 SA = "https://stockanalysis.com/quote/nase"
 UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36"}
 PRICE_TTL = 30 * 60          # prices update once per trading session
@@ -92,7 +102,9 @@ def diagnose(hosts=("afx.kwayisi.org", "stockanalysis.com")):
 
 
 class _HTTPSConnection(http.client.HTTPSConnection):
-    _create_connection = staticmethod(_connect)
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+        self._create_connection = _connect  # http.client sets this per instance in __init__
 
 
 class _HTTPSHandler(urllib.request.HTTPSHandler):
@@ -103,11 +115,13 @@ class _HTTPSHandler(urllib.request.HTTPSHandler):
 _opener = urllib.request.build_opener(_HTTPSHandler)
 
 
-def _get(url, ttl):
-    hit = _cache.get(url)
+def _get(url, ttl, data=None):
+    key = (url, data)
+    hit = _cache.get(key)
     if hit and time.time() - hit[0] < ttl:
         return hit[1]
-    req = urllib.request.Request(url, headers=UA)
+    headers = dict(UA, **({"Content-Type": "application/json"} if data else {}))
+    req = urllib.request.Request(url, data=data, headers=headers)
     t = time.time()
     try:
         with _opener.open(req, timeout=READ_TIMEOUT) as r:
@@ -116,8 +130,30 @@ def _get(url, ttl):
         print(f"fetch FAILED {url} after {time.time() - t:.1f}s: {e!r}", file=sys.stderr, flush=True)
         raise
     print(f"fetch {url} {time.time() - t:.1f}s", file=sys.stderr, flush=True)
-    _cache[url] = (time.time(), body)
+    _cache[key] = (time.time(), body)
     return body
+
+
+def _afx(path):
+    """GET an afx.kwayisi.org page, skipping the site for a while after network failures."""
+    global _afx_down_until
+    if time.time() < _afx_down_until:
+        raise ConnectionError("afx.kwayisi.org is unreachable from this server")
+    try:
+        return _get(AFX + path, PRICE_TTL)
+    except urllib.error.HTTPError:
+        raise
+    except (urllib.error.URLError, OSError):
+        _afx_down_until = time.time() + AFX_RETRY
+        raise ConnectionError("afx.kwayisi.org is unreachable from this server") from None
+
+
+def _tradingview():
+    """Every NSE listing from TradingView's scanner: {symbol: {column: value}}."""
+    body = json.dumps({"filter": [{"left": "exchange", "operation": "equal", "right": "NSEKE"}],
+                       "columns": TV_COLS, "range": [0, 500]}).encode()
+    rows = json.loads(_get(TV, PRICE_TTL, data=body))["data"]
+    return {r["d"][0]: dict(zip(TV_COLS, r["d"])) for r in rows if SYMBOL_RE.match(r["d"][0] or "")}
 
 
 def _text(s):
@@ -169,7 +205,23 @@ def cagr(values):
 # ---------- market list (afx.kwayisi.org) ----------
 
 def list_stocks():
-    page = _get(f"{AFX}/nse/", PRICE_TTL)
+    try:
+        tv = _tradingview()
+    except Exception as e:
+        print(f"TradingView list failed, trying afx: {e!r}", file=sys.stderr, flush=True)
+        return _afx_list()
+    if not tv:
+        return _afx_list()
+    rows = [{"symbol": sym, "name": r["description"], "volume": r["volume"], "price": r["close"],
+             # TradingView gives % change; the page expects the absolute change
+             "change": round(r["close"] - r["close"] / (1 + r["change"] / 100), 2)
+             if r["close"] and r["change"] is not None else None}
+            for sym, r in tv.items()]
+    return sorted(rows, key=lambda r: r["symbol"])
+
+
+def _afx_list():
+    page = _afx("/nse/")
     i = page.find("Listed companies")
     rows = []
     for tr in re.findall(r"<tr>(.*?)(?=<tr>|</table>)", page[i:], re.S):
@@ -191,11 +243,28 @@ def list_stocks():
     return rows
 
 
-# ---------- price (afx.kwayisi.org) ----------
+# ---------- price (TradingView, afx.kwayisi.org as fallback) ----------
 
 def _price(sym):
     try:
-        page = _get(f"{AFX}/nse/{sym.lower()}.html", PRICE_TTL)
+        r = _tradingview().get(sym)
+    except Exception as e:
+        print(f"TradingView price failed for {sym}, trying afx: {e!r}", file=sys.stderr, flush=True)
+        r = None
+    if r and r["close"]:
+        return {
+            "name": r["description"], "price": r["close"],
+            "52w_high": r["price_52_week_high"], "52w_low": r["price_52_week_low"],
+            "market_cap": r["market_cap_basic"], "eps": r["earnings_per_share_basic_ttm"],
+            "pe": r["price_earnings_ttm"], "dps": None,  # dividends come from stockanalysis.com
+            "sector": r["sector"], "industry": r["industry"],
+        }
+    return _afx_price(sym)
+
+
+def _afx_price(sym):
+    try:
+        page = _afx(f"/nse/{sym.lower()}.html")
     except urllib.error.HTTPError as e:
         if e.code == 404:
             raise ValueError(f"'{sym}' is not listed on the NSE") from None
@@ -211,7 +280,7 @@ def _price(sym):
         return " ".join(_text(f.group(1))) if f else None
 
     # 52-week range from daily closes
-    js = _get(f"{AFX}/chart/nse/{sym.lower()}", PRICE_TTL)
+    js = _afx(f"/chart/nse/{sym.lower()}")
     hist = re.findall(r'd\("(\d{4}-\d\d-\d\d)"\),([-\d.]+)\]', js)
     hi = lo = None
     if hist:
