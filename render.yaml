@@ -1,0 +1,9 @@
+# Render Blueprint: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: nse-stock-analyzer
+    runtime: python
+    plan: free
+    buildCommand: "echo 'no dependencies: standard library only'"
+    startCommand: python server.py
+    healthCheckPath: /

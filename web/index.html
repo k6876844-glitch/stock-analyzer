@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NSE Stock Analyzer · Kenya</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%232a78d6'/><path d='M7 22l6-7 5 4 7-9' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+<style>
+/* ---------- tokens ---------- */
+:root {
+  color-scheme: light;
+  --bg: #f4f3ef;
+  --bg-glow-1: rgba(42,120,214,.16);
+  --bg-glow-2: rgba(27,175,122,.12);
+  --surface-1: #fcfcfb;
+  --surface-2: #f0efec;
+  --border: rgba(11,11,11,.09);
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #7a7974;
+  --grid: rgba(11,11,11,.08);
+  --axis: rgba(11,11,11,.22);
+  --series-1: #2a78d6;
+  --series-1-soft: rgba(42,120,214,.12);
+  --good: #0ca30c; --good-text: #006300; --good-bg: rgba(12,163,12,.10);
+  --critical: #d03b3b; --critical-text: #b02a2a; --critical-bg: rgba(208,59,59,.09);
+  --unknown-bg: rgba(122,121,116,.12);
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.06);
+  --accent-grad: linear-gradient(135deg, #2a78d6 0%, #6250d6 55%, #1baf7a 100%);
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --bg: #111110; --bg-glow-1: rgba(57,135,229,.20); --bg-glow-2: rgba(25,158,112,.14);
+    --surface-1: #1a1a19; --surface-2: #232321; --border: rgba(255,255,255,.08);
+    --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+    --grid: rgba(255,255,255,.07); --axis: rgba(255,255,255,.22);
+    --series-1: #3987e5; --series-1-soft: rgba(57,135,229,.16);
+    --good-text: #5fd35f; --good-bg: rgba(12,163,12,.16);
+    --critical-text: #f08a8a; --critical-bg: rgba(208,59,59,.18);
+    --unknown-bg: rgba(255,255,255,.07);
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+    --accent-grad: linear-gradient(135deg, #3987e5 0%, #9085e9 55%, #199e70 100%);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --bg-glow-1: rgba(57,135,229,.20); --bg-glow-2: rgba(25,158,112,.14);
+  --surface-1: #1a1a19; --surface-2: #232321; --border: rgba(255,255,255,.08);
+  --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+  --grid: rgba(255,255,255,.07); --axis: rgba(255,255,255,.22);
+  --series-1: #3987e5; --series-1-soft: rgba(57,135,229,.16);
+  --good-text: #5fd35f; --good-bg: rgba(12,163,12,.16);
+  --critical-text: #f08a8a; --critical-bg: rgba(208,59,59,.18);
+  --unknown-bg: rgba(255,255,255,.07);
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+  --accent-grad: linear-gradient(135deg, #3987e5 0%, #9085e9 55%, #199e70 100%);
+}
+
+/* ---------- base ---------- */
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  color: var(--text-primary);
+  background:
+    radial-gradient(900px 500px at 8% -10%, var(--bg-glow-1), transparent 60%),
+    radial-gradient(800px 500px at 100% 0%, var(--bg-glow-2), transparent 60%),
+    var(--bg);
+  background-attachment: fixed;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+body::before { /* faint chart-paper grid */
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: -1;
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(to bottom, rgba(0,0,0,.5), transparent 420px);
+}
+.num { font-variant-numeric: tabular-nums; }
+button, input { font: inherit; color: inherit; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px 64px; }
+
+/* ---------- header ---------- */
+header.top { display: flex; align-items: center; justify-content: space-between; padding: 22px 0; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -.01em; font-size: 17px; }
+.brand-mark { width: 30px; height: 30px; border-radius: 9px; background: var(--accent-grad); display: grid; place-items: center; box-shadow: 0 4px 14px rgba(42,120,214,.35); }
+.icon-btn { border: 1px solid var(--border); background: var(--surface-1); border-radius: 10px; width: 38px; height: 38px; cursor: pointer; display: grid; place-items: center; box-shadow: var(--shadow); }
+.icon-btn:hover { background: var(--surface-2); }
+
+.hero-search { text-align: center; padding: 40px 0 28px; }
+.hero-search h1 {
+  margin: 0 0 6px; font-size: clamp(30px, 4.5vw, 46px); letter-spacing: -.03em; line-height: 1.1;
+}
+.hero-search h1 span { background: var(--accent-grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.hero-search p { margin: 0 0 26px; color: var(--text-secondary); }
+form.search { display: flex; gap: 8px; max-width: 620px; margin: 0 auto; padding: 6px; border-radius: 16px; background: var(--surface-1); border: 1px solid var(--border); box-shadow: var(--shadow); }
+form.search:focus-within { outline: 2px solid var(--series-1); outline-offset: 2px; }
+form.search input { flex: 1; border: 0; background: transparent; padding: 10px 12px; font-size: 16px; outline: none; text-transform: uppercase; letter-spacing: .04em; }
+form.search input::placeholder { text-transform: none; letter-spacing: 0; color: var(--text-muted); }
+form.search button { border: 0; border-radius: 11px; padding: 10px 20px; font-weight: 600; color: #fff; background: var(--accent-grad); cursor: pointer; box-shadow: 0 4px 14px rgba(42,120,214,.3); }
+form.search button:disabled { opacity: .6; cursor: wait; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 16px; }
+.chip { border: 1px solid var(--border); background: var(--surface-1); padding: 5px 12px; border-radius: 999px; font-size: 13px; color: var(--text-secondary); cursor: pointer; transition: transform .12s, border-color .12s; }
+.chip:hover { transform: translateY(-1px); border-color: var(--series-1); color: var(--text-primary); }
+
+/* ---------- cards ---------- */
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 18px; box-shadow: var(--shadow); padding: 20px 22px; }
+.card h2 { margin: 0 0 14px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--text-secondary); display: flex; align-items: center; gap: 8px; }
+.card h2 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-grad); }
+.grid { display: grid; gap: 16px; }
+.g-2 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+.g-4 { grid-template-columns: repeat(4, minmax(0,1fr)); }
+@media (max-width: 900px) { .g-2, .g-4 { grid-template-columns: 1fr; } }
+@media (min-width: 600px) and (max-width: 900px) { .g-4 { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+
+/* tabs for multiple tickers */
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 16px; }
+.tab { border: 1px solid var(--border); background: var(--surface-1); border-radius: 10px; padding: 7px 14px; cursor: pointer; font-weight: 600; letter-spacing: .03em; }
+.tab[aria-selected="true"] { background: var(--text-primary); color: var(--surface-1); border-color: transparent; }
+
+/* ---------- company hero ---------- */
+.company { display: grid; grid-template-columns: 1.4fr 1fr auto; gap: 28px; align-items: center; position: relative; overflow: hidden; }
+.company::after { content: ""; position: absolute; inset: 0 0 auto 0; height: 4px; background: var(--accent-grad); }
+@media (max-width: 900px) { .company { grid-template-columns: 1fr; } }
+.ticker-badge { display: inline-block; font-weight: 700; font-size: 12px; letter-spacing: .08em; padding: 3px 9px; border-radius: 7px; background: var(--series-1-soft); color: var(--series-1); }
+.company h3 { margin: 8px 0 2px; font-size: 26px; letter-spacing: -.02em; line-height: 1.2; }
+.company .sub { color: var(--text-secondary); font-size: 14px; }
+.price { font-size: 40px; font-weight: 700; letter-spacing: -.03em; margin-top: 10px; }
+.price small { font-size: 14px; color: var(--text-muted); font-weight: 500; margin-left: 6px; letter-spacing: 0; }
+
+.range-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+.range-track { position: relative; height: 8px; border-radius: 99px; background: var(--surface-2); }
+.range-fill { position: absolute; inset: 0 auto 0 0; border-radius: 99px; background: linear-gradient(90deg, var(--series-1-soft), var(--series-1)); }
+.range-pin { position: absolute; top: 50%; width: 16px; height: 16px; border-radius: 50%; background: var(--series-1); border: 3px solid var(--surface-1); transform: translate(-50%,-50%); box-shadow: 0 0 0 1px var(--series-1); }
+.range-ends { display: flex; justify-content: space-between; font-size: 13px; margin-top: 6px; color: var(--text-secondary); }
+.analyst { margin-top: 16px; font-size: 14px; color: var(--text-secondary); }
+.analyst b { color: var(--text-primary); }
+
+/* score ring */
+.ring { position: relative; width: 136px; height: 136px; }
+.ring svg { transform: rotate(-90deg); }
+.ring .track { stroke: var(--surface-2); }
+.ring .bar { stroke: url(#ringGrad); stroke-linecap: round; transition: stroke-dashoffset 1s cubic-bezier(.2,.8,.2,1); }
+.ring .label { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
+.ring .label b { font-size: 30px; letter-spacing: -.03em; display: block; line-height: 1; }
+.ring .label span { font-size: 12px; color: var(--text-muted); }
+
+/* ---------- metric tiles ---------- */
+.metrics { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+.metric { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; min-width: 0; }
+.metric .k { font-size: 12px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.metric .v { font-size: 20px; font-weight: 650; letter-spacing: -.02em; margin-top: 2px; }
+.badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 99px; margin-top: 4px; }
+.badge.pass { background: var(--good-bg); color: var(--good-text); }
+.badge.fail { background: var(--critical-bg); color: var(--critical-text); }
+.badge.na { background: var(--unknown-bg); color: var(--text-muted); }
+
+/* ---------- charts ---------- */
+.viz-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.viz-head h4 { margin: 0; font-size: 15px; }
+.viz-head .latest { font-size: 13px; color: var(--text-secondary); }
+.viz-toggle { border: 0; background: none; color: var(--text-muted); font-size: 12px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; padding: 0; }
+.viz-toggle:hover { color: var(--text-primary); }
+.viz svg { display: block; width: 100%; height: auto; overflow: visible; }
+.viz .gridline { stroke: var(--grid); }
+.viz .baseline { stroke: var(--axis); }
+.viz .tick { fill: var(--text-muted); font-size: 11px; }
+.viz .bar { fill: var(--series-1); transition: opacity .15s; }
+.viz .bars:hover .bar { opacity: .45; }
+.viz .bars .bar.active { opacity: 1; }
+.viz .hit { fill: transparent; cursor: pointer; }
+.viz table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+.viz td, .viz th { padding: 5px 4px; text-align: right; border-bottom: 1px solid var(--border); }
+.viz th:first-child, .viz td:first-child { text-align: left; }
+.viz th { color: var(--text-muted); font-weight: 500; }
+.tooltip { position: fixed; pointer-events: none; z-index: 10; background: var(--surface-1); border: 1px solid var(--border); box-shadow: var(--shadow); border-radius: 10px; padding: 8px 11px; font-size: 13px; opacity: 0; transform: translateY(4px); transition: opacity .12s, transform .12s; }
+.tooltip.show { opacity: 1; transform: none; }
+.tooltip .t { color: var(--text-muted); font-size: 12px; }
+.tooltip .val { font-weight: 650; }
+
+/* ---------- scorecard ---------- */
+.checks { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px 20px; }
+@media (max-width: 700px) { .checks { grid-template-columns: 1fr; } }
+.check { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--border); font-size: 14px; }
+.check .ico { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; flex: none; }
+.check.pass .ico { background: var(--good-bg); color: var(--good-text); }
+.check.fail .ico { background: var(--critical-bg); color: var(--critical-text); }
+.check.na .ico { background: var(--unknown-bg); color: var(--text-muted); }
+.check .cat { color: var(--text-muted); font-size: 12px; min-width: 88px; }
+.check .state { margin-left: auto; font-size: 12px; color: var(--text-muted); }
+
+/* ---------- compare ---------- */
+table.compare { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.compare th, table.compare td { padding: 9px 10px; text-align: right; border-bottom: 1px solid var(--border); }
+table.compare th:first-child, table.compare td:first-child { text-align: left; color: var(--text-secondary); }
+table.compare thead th { font-size: 13px; letter-spacing: .05em; color: var(--text-primary); }
+table.compare td.best { font-weight: 700; }
+table.compare td.best::before { content: "★ "; color: var(--text-muted); font-size: 11px; }
+table.compare tr.score td { font-weight: 700; border-bottom: 0; }
+
+/* ---------- deltas (arrow + sign carry meaning, color supports) ---------- */
+.up { color: var(--good-text); }
+.down { color: var(--critical-text); }
+.flat { color: var(--text-muted); }
+.change { font-size: 16px; font-weight: 600; margin-left: 4px; letter-spacing: 0; }
+
+/* ---------- NSE browse ---------- */
+.browse-head { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 12px; }
+.browse-head h2 { margin: 0; }
+.filter { border: 1px solid var(--border); background: var(--surface-2); border-radius: 10px; padding: 7px 12px; min-width: 220px; outline: none; }
+.filter:focus { border-color: var(--series-1); }
+.stock-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; max-height: 520px; overflow-y: auto; padding-right: 4px; }
+.stock-row { display: grid; grid-template-columns: 58px 1fr auto; gap: 10px; align-items: center; text-align: left; border: 1px solid var(--border); background: var(--surface-2); border-radius: 12px; padding: 9px 12px; cursor: pointer; transition: border-color .12s, transform .12s; }
+.stock-row:hover { border-color: var(--series-1); transform: translateY(-1px); }
+.stock-row .sym { font-weight: 700; font-size: 13px; letter-spacing: .03em; }
+.stock-row .nm { font-size: 12px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stock-row .px { text-align: right; font-size: 13px; font-weight: 600; }
+.stock-row .px div { font-size: 11px; font-weight: 500; }
+
+/* ---------- states ---------- */
+.empty { text-align: center; color: var(--text-muted); padding: 40px 0; }
+.error { border: 1px solid var(--critical-bg); background: var(--critical-bg); color: var(--critical-text); border-radius: 12px; padding: 10px 14px; margin-bottom: 16px; font-size: 14px; }
+.skeleton { height: 160px; border-radius: 18px; background: linear-gradient(90deg, var(--surface-1), var(--surface-2), var(--surface-1)); background-size: 200% 100%; animation: shimmer 1.2s infinite; border: 1px solid var(--border); }
+@keyframes shimmer { to { background-position: -200% 0; } }
+.fade-in { animation: fade .35s ease both; }
+@keyframes fade { from { opacity: 0; transform: translateY(6px); } }
+footer { margin-top: 36px; text-align: center; color: var(--text-muted); font-size: 12px; }
+.mt { margin-top: 16px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <div class="brand-mark"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg></div>
+      NSE Stock Analyzer
+    </div>
+    <button class="icon-btn" id="themeBtn" title="Toggle light/dark" aria-label="Toggle light or dark theme">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+    </button>
+  </header>
+
+  <section class="hero-search">
+    <h1>Kenyan stock <span>fundamentals</span> at a glance</h1>
+    <p>Nairobi Securities Exchange companies: valuation, growth, profitability and balance-sheet health, scored against simple rules of thumb.</p>
+    <form class="search" id="form">
+      <input id="q" placeholder="Enter NSE tickers, e.g. SCOM or EQTY, KCB, COOP" autocomplete="off" spellcheck="false" aria-label="Ticker symbols">
+      <button id="go" type="submit">Analyze</button>
+    </form>
+    <div class="chips" id="chips"></div>
+  </section>
+
+  <main id="out"><div class="empty">Pick a ticker above to get started.</div></main>
+
+  <footer>Prices from afx.kwayisi.org, fundamentals from stockanalysis.com. All figures in Kenyan shillings (KES). Thresholds are rules of thumb; norms vary by sector. Not investment advice.</footer>
+</div>
+<div class="tooltip" id="tip" role="status" aria-live="polite"></div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs><linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2a78d6"/><stop offset=".55" stop-color="#6250d6"/><stop offset="1" stop-color="#1baf7a"/></linearGradient>
+</defs>
+</svg>
+
+<script>
+// ---------- formatting ----------
+const isNum = x => typeof x === "number" && isFinite(x);
+const CUR = "KES ";
+const money = x => {
+  if (!isNum(x)) return "n/a";
+  const s = x < 0 ? "-" : ""; x = Math.abs(x);
+  for (const [u, d] of [["T",1e12],["B",1e9],["M",1e6],["K",1e3]]) if (x >= d) return `${s}${CUR}${(x/d).toFixed(2)}${u}`;
+  return `${s}${CUR}${x.toFixed(2)}`;
+};
+const delta = (x, txt) => {
+  if (!isNum(x)) return `<span class="flat">n/a</span>`;
+  const cls = x > 0 ? "up" : x < 0 ? "down" : "flat", arrow = x > 0 ? "▲" : x < 0 ? "▼" : "■";
+  return `<span class="${cls}">${arrow} ${txt ?? (x > 0 ? "+" : "") + (x * 100).toFixed(1) + "%"}</span>`;
+};
+const pct = (x, already) => isNum(x) ? `${(already ? x : x*100).toFixed(1)}%` : "n/a";
+const ratio = x => isNum(x) ? x.toFixed(2) : "n/a";
+const eps = x => isNum(x) ? `${CUR}${x.toFixed(2)}` : "n/a";
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+// ---------- theme ----------
+const themeBtn = document.getElementById("themeBtn");
+const saved = localStorage.getItem("theme");
+if (saved) document.documentElement.dataset.theme = saved;
+themeBtn.onclick = () => {
+  const dark = document.documentElement.dataset.theme
+    ? document.documentElement.dataset.theme === "dark"
+    : matchMedia("(prefers-color-scheme: dark)").matches;
+  const next = dark ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  localStorage.setItem("theme", next);
+};
+
+// ---------- quick picks ----------
+const PICKS = [["SCOM"], ["EQTY"], ["KCB"], ["EABL"], ["COOP"], ["ABSA"], ["NCBA"], ["Compare banks", "EQTY, KCB, COOP, ABSA, NCBA"]];
+const chips = document.getElementById("chips");
+PICKS.forEach(([label, val]) => {
+  const b = document.createElement("button");
+  b.className = "chip"; b.type = "button"; b.textContent = label;
+  b.onclick = () => { q.value = val || label; run(val || label); };
+  chips.appendChild(b);
+});
+function showHome() { browseNSE(); }
+
+// ---------- fetch ----------
+const form = document.getElementById("form"), q = document.getElementById("q"), go = document.getElementById("go"), out = document.getElementById("out");
+let state = { results: [], active: 0, errors: {} };
+
+form.onsubmit = e => { e.preventDefault(); if (q.value.trim()) run(q.value); };
+
+async function run(text) {
+  const syms = text.split(/[\s,]+/).map(s => s.trim().toUpperCase()).filter(Boolean);
+  if (!syms.length) return;
+  history.replaceState(null, "", "?s=" + encodeURIComponent(syms.join(",")));
+  go.disabled = true; go.textContent = "Loading…";
+  out.innerHTML = `<div class="grid"><div class="skeleton"></div><div class="grid g-2"><div class="skeleton"></div><div class="skeleton"></div></div></div>`;
+  try {
+    const r = await fetch("/api/analyze?symbols=" + encodeURIComponent(syms.join(",")));
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || r.statusText);
+    state = { results: data.results, active: 0, errors: data.errors || {} };
+    render();
+  } catch (err) {
+    out.innerHTML = `<div class="error">Couldn't load data: ${esc(err.message)}. Is the server running?</div>`;
+  } finally {
+    go.disabled = false; go.textContent = "Analyze";
+  }
+}
+
+// ---------- render ----------
+function render() {
+  const { results, errors, active } = state;
+  let html = "";
+  for (const [s, msg] of Object.entries(errors))
+    html += `<div class="error"><b>${esc(s)}</b>: ${esc(msg.includes("no data") ? "ticker not found" : msg)}</div>`;
+  if (!results.length) { out.innerHTML = html || `<div class="empty">No results.</div>`; browseNSE(html); return; }
+
+  if (results.length > 1) {
+    html += `<div class="card fade-in"><h2><span class="dot"></span>Side-by-side</h2>${compareTable(results)}</div>`;
+    html += `<div class="tabs mt" role="tablist">${results.map((m, i) =>
+      `<button class="tab" role="tab" aria-selected="${i === active}" data-i="${i}">${esc(m.symbol)}</button>`).join("")}</div>`;
+  }
+  html += `<div id="detail">${detail(results[active])}</div>`;
+  out.innerHTML = html;
+  out.querySelectorAll(".tab").forEach(t => t.onclick = () => { state.active = +t.dataset.i; render(); });
+  wireCharts();
+  requestAnimationFrame(() => out.querySelectorAll(".ring .bar").forEach(b => b.style.strokeDashoffset = b.dataset.to));
+}
+
+function checkFor(m, key) { return m.scorecard.find(c => c.key === key); }
+
+function tile(m, label, value, key) {
+  const c = key && checkFor(m, key);
+  let badge = "";
+  if (c) {
+    const cls = c.passed === true ? "pass" : c.passed === false ? "fail" : "na";
+    const txt = c.passed === true ? "✓ " : c.passed === false ? "✗ " : "? ";
+    badge = `<div><span class="badge ${cls}" title="${esc(c.label)}">${txt}${esc(c.label)}</span></div>`;
+  }
+  return `<div class="metric"><div class="k">${esc(label)}</div><div class="v num">${value}</div>${badge}</div>`;
+}
+
+function section(title, tiles) {
+  return `<div class="card fade-in"><h2><span class="dot"></span>${title}</h2><div class="metrics">${tiles.join("")}</div></div>`;
+}
+
+function detail(m) {
+  const sc = m.scorecard, passed = sc.filter(c => c.passed).length, known = sc.filter(c => c.passed !== null).length;
+  const C = 2 * Math.PI * 56, frac = known ? passed / known : 0;
+  const lo = m["52w_low"], hi = m["52w_high"], p = m.price;
+  const pos = isNum(lo) && isNum(hi) && isNum(p) && hi > lo ? Math.min(100, Math.max(0, (p - lo) / (hi - lo) * 100)) : null;
+  const upside = isNum(m.analyst_target) && isNum(p) ? m.analyst_target / p - 1 : null;
+  const nRev = m.history.revenue.filter(isNum).length, nEps = m.history.eps.filter(isNum).length;
+
+  const hero = `
+  <div class="card company fade-in">
+    <div>
+      <span class="ticker-badge">NSE: ${esc(m.symbol)}</span>
+      <h3>${esc(m.name)}</h3>
+      <div class="sub">${esc(m.sector || "—")} · ${esc(m.industry || "—")}</div>
+      <div class="price num">${money(p)}<small>market cap ${money(m.market_cap)}</small></div>
+    </div>
+    <div>
+      ${pos === null ? "" : `
+      <div class="range-label"><span>52-week range</span><span>${pos.toFixed(0)}% of range</span></div>
+      <div class="range-track"><div class="range-fill" style="width:${pos}%"></div><div class="range-pin" style="left:${pos}%"></div></div>
+      <div class="range-ends num"><span>${money(lo)}</span><span>${money(hi)}</span></div>`}
+      ${isNum(m.analyst_target) ? `<div class="analyst">Analyst target <b class="num">${money(m.analyst_target)}</b> (${upside >= 0 ? "+" : ""}${pct(upside)} vs. price) · consensus <b>${esc((m.analyst_rating || "n/a").replace(/_/g, " "))}</b> from ${m.analyst_count || 0}</div>` : ""}
+    </div>
+    <div class="ring" title="${passed} of ${known} checks passed">
+      <svg width="136" height="136" viewBox="0 0 136 136" aria-hidden="true">
+        <circle class="track" cx="68" cy="68" r="56" fill="none" stroke-width="12"/>
+        <circle class="bar" cx="68" cy="68" r="56" fill="none" stroke-width="12" stroke-dasharray="${C}" stroke-dashoffset="${C}" data-to="${C * (1 - frac)}"/>
+      </svg>
+      <div class="label"><div><b class="num">${passed}/${known}</b><span>checks passed</span></div></div>
+    </div>
+  </div>`;
+
+  const sections = `
+  <div class="grid g-2 mt">
+    ${section("Valuation", [
+      tile(m, "P/E (trailing)", ratio(m.pe_trailing)),
+      tile(m, "P/E (forward)", ratio(m.pe_forward), "pe_forward"),
+      tile(m, "PEG", ratio(m.peg), "peg"),
+      tile(m, "FCF yield", pct(m.fcf_yield), "fcf_yield"),
+      tile(m, "Price / Sales", ratio(m.price_to_sales)),
+      tile(m, "EV / EBITDA", ratio(m.ev_to_ebitda)),
+    ])}
+    ${section("Growth", [
+      tile(m, "Revenue growth (TTM)", pct(m.revenue_growth_yoy), "revenue_growth_yoy"),
+      tile(m, "EPS growth (TTM)", pct(m.earnings_growth_yoy)),
+      tile(m, `Revenue CAGR (${Math.max(nRev - 1, 0)}y)`, pct(m.revenue_cagr), "revenue_cagr"),
+      tile(m, `EPS CAGR (${Math.max(nEps - 1, 0)}y)`, pct(m.eps_cagr), "eps_cagr"),
+    ])}
+    ${section("Profitability", [
+      tile(m, "Gross margin", pct(m.gross_margin)),
+      tile(m, "Operating margin", pct(m.operating_margin), "operating_margin"),
+      tile(m, "Net margin", pct(m.net_margin), "net_margin"),
+      tile(m, "Return on equity", pct(m.roe), "roe"),
+    ])}
+    ${section("Financial health", [
+      tile(m, "Cash", money(m.total_cash)),
+      tile(m, "Debt", money(m.total_debt)),
+      tile(m, "Debt / Equity", ratio(m.debt_to_equity), "debt_to_equity"),
+      tile(m, "Current ratio", ratio(m.current_ratio), "current_ratio"),
+      tile(m, "Free cash flow (FY)", money(m.free_cash_flow), "free_cash_flow"),
+      tile(m, "Dividend yield", isNum(m.dividend_yield_pct) && m.dividend_yield_pct > 0 ? pct(m.dividend_yield_pct, true) : "None"),
+    ])}
+  </div>`;
+
+  const h = m.history;
+  const charts = `
+  <div class="card mt fade-in"><h2><span class="dot"></span>Annual history · KES</h2>
+    <div class="grid g-4">
+      ${chart("Revenue", h.years, h.revenue, money)}
+      ${chart("Net income", h.years, h.net_income, money)}
+      ${chart("EPS (diluted)", h.years, h.eps, eps)}
+      ${chart("Free cash flow", h.years, h.free_cash_flow, money)}
+    </div>
+  </div>`;
+
+  const checks = `
+  <div class="card mt fade-in"><h2><span class="dot"></span>Scorecard · ${passed}/${known} passed</h2>
+    <div class="checks">${sc.map(c => {
+      const cls = c.passed === true ? "pass" : c.passed === false ? "fail" : "na";
+      return `<div class="check ${cls}"><span class="ico">${c.passed === true ? "✓" : c.passed === false ? "✗" : "?"}</span><span class="cat">${esc(c.category)}</span><span>${esc(c.label)}</span><span class="state">${c.passed === true ? "Pass" : c.passed === false ? "Fail" : "No data"}</span></div>`;
+    }).join("")}</div>
+  </div>`;
+
+  return hero + sections + charts + checks;
+}
+
+// ---------- bar chart (single series, one axis, oldest -> newest) ----------
+let chartId = 0;
+function niceTicks(min, max, n = 4) {
+  const span = max - min || Math.abs(max) || 1;
+  const step0 = span / n, mag = 10 ** Math.floor(Math.log10(step0));
+  const step = [1, 2, 2.5, 5, 10].map(s => s * mag).find(s => s >= step0);
+  const lo = Math.floor(min / step) * step, hi = Math.ceil(max / step) * step, t = [];
+  for (let v = lo; v <= hi + step / 2; v += step) t.push(+v.toPrecision(12));
+  return t;
+}
+function barPath(x, w, y0, y1, r) {
+  // rounded corners on the data end only; anchored square to the baseline
+  const h = Math.abs(y1 - y0); r = Math.min(r, w / 2, h);
+  if (y1 <= y0) // positive: grows up
+    return `M${x},${y0}V${y1 + r}Q${x},${y1} ${x + r},${y1}H${x + w - r}Q${x + w},${y1} ${x + w},${y1 + r}V${y0}Z`;
+  return `M${x},${y0}V${y1 - r}Q${x},${y1} ${x + r},${y1}H${x + w - r}Q${x + w},${y1} ${x + w},${y1 - r}V${y0}Z`;
+}
+function chart(title, years, values, fmt) {
+  const pts = years.map((y, i) => ({ y, v: values[i] })).filter(d => isNum(d.v)).reverse();
+  const id = "c" + (chartId++);
+  if (!pts.length) return `<div class="viz"><div class="viz-head"><h4>${title}</h4></div><div class="empty">No data</div></div>`;
+  const W = 260, H = 160, L = 44, R = 4, T = 10, B = 22;
+  const vmin = Math.min(0, ...pts.map(d => d.v)), vmax = Math.max(0, ...pts.map(d => d.v));
+  const ticks = niceTicks(vmin, vmax), t0 = ticks[0], t1 = ticks[ticks.length - 1];
+  const sy = v => T + (H - T - B) * (1 - (v - t0) / (t1 - t0 || 1));
+  const band = (W - L - R) / pts.length, bw = Math.min(34, band * 0.62);
+  const tickFmt = v => v === 0 ? "0" : fmt === eps ? v.toFixed(Math.abs(t1 - t0) < 5 ? 1 : 0) : money(v).replace(CUR, "").replace(/\.00(?=[TBMK])/, "").replace(/(\.\d)0(?=[TBMK])/, "$1");
+  const latest = pts[pts.length - 1];
+  const svg = `
+  <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${title} by fiscal year">
+    ${ticks.map(t => `<line class="${t === 0 ? "baseline" : "gridline"}" x1="${L}" x2="${W - R}" y1="${sy(t)}" y2="${sy(t)}"/>
+      <text class="tick num" x="${L - 6}" y="${sy(t) + 4}" text-anchor="end">${tickFmt(t)}</text>`).join("")}
+    <g class="bars">
+      ${pts.map((d, i) => {
+        const x = L + band * i + (band - bw) / 2;
+        return `<path class="bar" d="${barPath(x, bw, sy(0), sy(d.v), 4)}"/>
+          <rect class="hit" x="${L + band * i}" y="${T}" width="${band}" height="${H - T - B}" data-t="FY${d.y}" data-v="${esc(fmt(d.v))}"/>`;
+      }).join("")}
+    </g>
+    ${pts.map((d, i) => `<text class="tick num" x="${L + band * i + band / 2}" y="${H - 5}" text-anchor="middle">${d.y}</text>`).join("")}
+  </svg>`;
+  const table = `<table><thead><tr><th>Year</th><th>${title}</th></tr></thead><tbody>${pts.slice().reverse().map(d => `<tr><td>FY${d.y}</td><td class="num">${fmt(d.v)}</td></tr>`).join("")}</tbody></table>`;
+  return `<div class="viz" id="${id}">
+    <div class="viz-head"><h4>${title}</h4><button class="viz-toggle" type="button" data-for="${id}">Table</button></div>
+    <div class="latest num">FY${latest.y}: ${fmt(latest.v)}</div>
+    <div class="viz-body">${svg}</div><div class="viz-table" hidden>${table}</div>
+  </div>`;
+}
+
+const tip = document.getElementById("tip");
+function wireCharts() {
+  out.querySelectorAll(".viz .bars .hit").forEach(h => {
+    const bar = h.previousElementSibling;
+    const show = e => {
+      bar.classList.add("active");
+      tip.innerHTML = `<div class="t">${h.dataset.t}</div><div class="val num">${h.dataset.v}</div>`;
+      const r = h.getBoundingClientRect();
+      tip.style.left = Math.min(innerWidth - 140, r.left + r.width / 2 - 40) + "px";
+      tip.style.top = (e.clientY ? e.clientY - 64 : r.top - 10) + "px";
+      tip.classList.add("show");
+    };
+    const hide = () => { bar.classList.remove("active"); tip.classList.remove("show"); };
+    h.addEventListener("mousemove", show); h.addEventListener("mouseleave", hide);
+  });
+  out.querySelectorAll(".viz-toggle").forEach(b => b.onclick = () => {
+    const v = document.getElementById(b.dataset.for), body = v.querySelector(".viz-body"), tbl = v.querySelector(".viz-table");
+    const toTable = tbl.hidden; tbl.hidden = !toTable; body.hidden = toTable; b.textContent = toTable ? "Chart" : "Table";
+  });
+}
+
+// ---------- compare ----------
+function compareTable(ms) {
+  // dir: 1 = higher is better, -1 = lower is better (positive values only), 0 = no "best"
+  const rows = [
+    ["Price", "price", money, 0], ["Market cap", "market_cap", money, 0],
+    ["P/E (forward)", "pe_forward", ratio, -1], ["PEG", "peg", ratio, -1],
+    ["Price / Sales", "price_to_sales", ratio, -1], ["FCF yield", "fcf_yield", pct, 1],
+    ["Revenue growth", "revenue_growth_yoy", pct, 1], ["Revenue CAGR", "revenue_cagr", pct, 1],
+    ["Operating margin", "operating_margin", pct, 1], ["Net margin", "net_margin", pct, 1],
+    ["ROE", "roe", pct, 1], ["Debt / Equity", "debt_to_equity", ratio, -1],
+    ["Current ratio", "current_ratio", ratio, 1],
+  ];
+  const head = `<thead><tr><th></th>${ms.map(m => `<th>${esc(m.symbol)}</th>`).join("")}</tr></thead>`;
+  const body = rows.map(([label, key, fmt, dir]) => {
+    const vals = ms.map(m => m[key]);
+    let best = null;
+    if (dir) {
+      const cand = vals.map((v, i) => [v, i]).filter(([v]) => isNum(v) && (dir > 0 || v > 0));
+      if (cand.length > 1) best = cand.reduce((a, b) => (dir > 0 ? b[0] > a[0] : b[0] < a[0]) ? b : a)[1];
+    }
+    return `<tr><td>${label}</td>${vals.map((v, i) => `<td class="num${i === best ? " best" : ""}">${fmt(v)}</td>`).join("")}</tr>`;
+  }).join("");
+  const score = `<tr class="score"><td>Score</td>${ms.map(m => {
+    const s = m.scorecard; return `<td class="num">${s.filter(c => c.passed).length}/${s.filter(c => c.passed !== null).length}</td>`;
+  }).join("")}</tr>`;
+  return `<div style="overflow-x:auto"><table class="compare">${head}<tbody>${body}${score}</tbody></table></div>
+    <div style="font-size:12px;color:var(--text-muted);margin-top:8px">★ marks the strongest value in each row.</div>`;
+}
+
+// ---------- NSE: browse all listings ----------
+let nseList = null;
+async function browseNSE(prefix = "") {
+  out.innerHTML = prefix + `<div class="card fade-in"><div class="skeleton" style="height:240px;border:0"></div></div>`;
+  try {
+    if (!nseList) {
+      const r = await fetch("/api/nse/list"); const d = await r.json();
+      if (!r.ok) throw new Error(d.error || r.statusText);
+      nseList = d.stocks;
+    }
+  } catch (err) {
+    out.innerHTML = prefix + `<div class="error">Couldn't load the NSE listing: ${esc(err.message)}</div>`; return;
+  }
+  if (state.results.length) return;  // user picked a stock while loading
+  out.innerHTML = prefix + `
+  <div class="card fade-in">
+    <div class="browse-head">
+      <h2><span class="dot"></span>All Nairobi Securities Exchange stocks · ${nseList.length}</h2>
+      <input class="filter" id="nseFilter" placeholder="Filter by name or ticker" aria-label="Filter NSE stocks">
+    </div>
+    <div class="stock-list" id="nseRows"></div>
+    <div style="font-size:12px;color:var(--text-muted);margin-top:10px">Click a stock to analyze it. Today's change is in KES.</div>
+  </div>`;
+  const rowsEl = document.getElementById("nseRows"), f = document.getElementById("nseFilter");
+  const draw = () => {
+    const t = f.value.trim().toLowerCase();
+    rowsEl.innerHTML = nseList.filter(x => !t || x.symbol.toLowerCase().includes(t) || x.name.toLowerCase().includes(t)).map(x => {
+      const ch = isNum(x.change) && x.price ? x.change / (x.price - x.change) : null;
+      return `<button class="stock-row" type="button" data-s="${esc(x.symbol)}">
+        <span class="sym">${esc(x.symbol)}</span><span class="nm" title="${esc(x.name)}">${esc(x.name)}</span>
+        <span class="px num">${isNum(x.price) ? x.price.toFixed(2) : "n/a"}<div>${!x.volume ? '<span class="flat">no trades</span>' : isNum(ch) && x.change !== 0 ? delta(ch) : '<span class="flat">unchanged</span>'}</div></span>
+      </button>`;
+    }).join("") || `<div class="empty">No match.</div>`;
+    rowsEl.querySelectorAll(".stock-row").forEach(b => b.onclick = () => { q.value = b.dataset.s; run(b.dataset.s); scrollTo({ top: 0, behavior: "smooth" }); });
+  };
+  f.oninput = draw; draw();
+}
+
+// ---------- boot ----------
+const initial = new URLSearchParams(location.search).get("s");
+if (initial) { q.value = initial; run(initial); } else showHome();
+</script>
+</body>
+</html>
