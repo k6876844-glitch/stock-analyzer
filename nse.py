@@ -3,8 +3,9 @@
 Public sources, combined into one record per stock:
   * TradingView scanner - price, day change, 52-week range, sector and the full list
                           of NSE tickers, all in one request
-  * afx.kwayisi.org     - fallback for prices and the list when TradingView fails or
-                          lacks a ticker (it drops connections from some cloud hosts,
+  * live.mystocks.co.ke  - first fallback for prices and the list (TradingView
+                          rate-limits some shared cloud IPs, e.g. Render's)
+  * afx.kwayisi.org     - last fallback (it drops connections from some cloud hosts,
                           e.g. Render, so after a network failure it is skipped a while)
   * stockanalysis.com  - fundamentals: ratios, margins, balance sheet, 5 years of
                          financial statements, analyst targets
@@ -24,6 +25,7 @@ from datetime import date, timedelta
 
 AFX = "https://afx.kwayisi.org"
 TV = "https://scanner.tradingview.com/kenya/scan"
+MYSTOCKS = "https://live.mystocks.co.ke"
 TV_COLS = ["name", "description", "close", "change", "volume", "price_52_week_high",
            "price_52_week_low", "market_cap_basic", "sector", "industry",
            "price_earnings_ttm", "earnings_per_share_basic_ttm"]
@@ -75,7 +77,8 @@ def _connect(address, timeout=None, source_address=None, **kw):
     raise OSError(f"can't connect to {host}: " + "; ".join(errors or ["no addresses"]))
 
 
-def diagnose(hosts=("afx.kwayisi.org", "stockanalysis.com", "scanner.tradingview.com")):
+def diagnose(hosts=("afx.kwayisi.org", "stockanalysis.com", "scanner.tradingview.com",
+                    "live.mystocks.co.ke")):
     """Test DNS and a TCP connect to every address of each source host."""
     out = {}
     for host in hosts:
@@ -103,6 +106,10 @@ def diagnose(hosts=("afx.kwayisi.org", "stockanalysis.com", "scanner.tradingview
     except Exception as e:
         body = e.read()[:300].decode("utf-8", "replace") if hasattr(e, "read") else ""
         out["tradingview_scan"] = f"{e!r} {body}".strip()
+    try:
+        out["mystocks_list"] = f"ok, {len(_mystocks_list())} stocks"
+    except Exception as e:
+        out["mystocks_list"] = repr(e)
     return out
 
 
@@ -120,12 +127,12 @@ class _HTTPSHandler(urllib.request.HTTPSHandler):
 _opener = urllib.request.build_opener(_HTTPSHandler)
 
 
-def _get(url, ttl, data=None):
+def _get(url, ttl, data=None, extra_headers=None):
     key = (url, data)
     hit = _cache.get(key)
     if hit and time.time() - hit[0] < ttl:
         return hit[1]
-    headers = dict(UA, **({"Content-Type": "application/json"} if data else {}))
+    headers = dict(UA, **(extra_headers or {}))
     req = urllib.request.Request(url, data=data, headers=headers)
     t = time.time()
     try:
@@ -157,7 +164,11 @@ def _tradingview():
     """Every NSE listing from TradingView's scanner: {symbol: {column: value}}."""
     body = json.dumps({"filter": [{"left": "exchange", "operation": "equal", "right": "NSEKE"}],
                        "columns": TV_COLS, "range": [0, 500]}).encode()
-    rows = json.loads(_get(TV, PRICE_TTL, data=body))["data"]
+    rows = json.loads(_get(TV, PRICE_TTL, data=body, extra_headers={
+        "Content-Type": "application/json",
+        "Origin": "https://www.tradingview.com",
+        "Referer": "https://www.tradingview.com/",
+    }))["data"]
     return {r["d"][0]: dict(zip(TV_COLS, r["d"])) for r in rows if SYMBOL_RE.match(r["d"][0] or "")}
 
 
@@ -209,14 +220,71 @@ def cagr(values):
 
 # ---------- market list (afx.kwayisi.org) ----------
 
-def list_stocks():
+def _mystocks_list():
+    page = _get(f"{MYSTOCKS}/m/pricelist", PRICE_TTL)
+    names = {v: html.unescape(n).strip() for v, n in re.findall(r"<option value=([A-Z0-9-]+)>([^<\n]+)", page)}
+    rows = []
+    for sym, price, chg, vol in re.findall(
+            r'<a href="/m/stock=([A-Z0-9]+)">[^<]*</a><br>\s*<td class=n>([^<]*)<td class="n x[-\d]+">([^<]*)<td class=n>([^<]*)',
+            page):
+        if not SYMBOL_RE.match(sym):
+            continue
+        price = _n(price)
+        pct = _n(html.unescape(chg).replace("\u25b2", "").replace("\u25bc", "-").replace("\xa0", "").replace(" ", ""))
+        rows.append({
+            "symbol": sym, "name": names.get(sym, sym), "volume": _n(vol), "price": price,
+            "change": round(price - price / (1 + pct), 2) if price and pct is not None else 0.0,
+        })
+    if not rows:
+        raise RuntimeError("could not read the myStocks price list (layout may have changed)")
+    return sorted(rows, key=lambda r: r["symbol"])
+
+
+def _mystocks_price(sym):
     try:
-        tv = _tradingview()
-    except Exception as e:
-        print(f"TradingView list failed, trying afx: {e!r}", file=sys.stderr, flush=True)
-        return _afx_list()
+        page = _get(f"{MYSTOCKS}/stock={sym}", PRICE_TTL)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            raise ValueError(f"'{sym}' is not listed on the NSE") from None
+        raise
+
+    def span(i):
+        m = re.search(rf"id={i}>([^<]*)", page)
+        return _n(m.group(1)) if m else None
+
+    d = re.search(r'<meta name=description content="([^"]*?) \(' + re.escape(sym) + r'\), Sector: ([^,]*),', page)
+    price = span("rtPrice")
+    if not d or not price:
+        raise ValueError(f"no data found for '{sym}'")
+    return {
+        "name": html.unescape(html.unescape(d.group(1))), "price": price,
+        "52w_high": span("rtYrHigh"), "52w_low": span("rtYrLow"),
+        "market_cap": None, "eps": None, "pe": None, "dps": None,  # from stockanalysis.com
+        "sector": html.unescape(d.group(2)).strip() or None, "industry": None,
+    }
+
+
+def _first(label, *sources):
+    """Return the first source's result; log failures and try the next one."""
+    errors = []
+    for name, fn in sources:
+        try:
+            return fn()
+        except Exception as e:
+            errors.append(e)
+            print(f"{label}: {name} failed: {e!r}", file=sys.stderr, flush=True)
+    # "ticker not found" from any source beats a network error from a later one
+    raise next((e for e in errors if isinstance(e, ValueError)), errors[-1])
+
+
+def list_stocks():
+    return _first("NSE list", ("TradingView", _tv_list), ("myStocks", _mystocks_list), ("afx", _afx_list))
+
+
+def _tv_list():
+    tv = _tradingview()
     if not tv:
-        return _afx_list()
+        raise RuntimeError("TradingView returned no NSE stocks")
     rows = [{"symbol": sym, "name": r["description"], "volume": r["volume"], "price": r["close"],
              # TradingView gives % change; the page expects the absolute change
              "change": round(r["close"] - r["close"] / (1 + r["change"] / 100), 2)
@@ -252,10 +320,14 @@ def _afx_list():
 
 def _price(sym):
     try:
-        r = _tradingview().get(sym)
-    except Exception as e:
-        print(f"TradingView price failed for {sym}, trying afx: {e!r}", file=sys.stderr, flush=True)
-        r = None
+        return _first(f"price {sym}", ("TradingView", lambda: _tv_price(sym)),
+                      ("myStocks", lambda: _mystocks_price(sym)), ("afx", lambda: _afx_price(sym)))
+    except ConnectionError:
+        raise ConnectionError("couldn't reach any NSE price source; try again in a few minutes") from None
+
+
+def _tv_price(sym):
+    r = _tradingview().get(sym)
     if r and r["close"]:
         return {
             "name": r["description"], "price": r["close"],
@@ -264,7 +336,7 @@ def _price(sym):
             "pe": r["price_earnings_ttm"], "dps": None,  # dividends come from stockanalysis.com
             "sector": r["sector"], "industry": r["industry"],
         }
-    return _afx_price(sym)
+    raise LookupError(f"TradingView has no price for {sym}")
 
 
 def _afx_price(sym):
