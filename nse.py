@@ -9,7 +9,10 @@ Two public sources, combined into one record per stock:
 Pages are cached and only fetched when someone asks for a ticker.
 """
 import html
+import http.client
 import re
+import socket
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -26,13 +29,61 @@ SYMBOL_RE = re.compile(r"^[A-Z0-9]{1,10}$")
 
 # ---------- helpers ----------
 
+CONNECT_TIMEOUT = 5   # per address; the source hosts publish 4-6 addresses each
+READ_TIMEOUT = 20
+
+
+def _connect(address, timeout=None, source_address=None, **kw):
+    """Like socket.create_connection, but IPv4 first and a short timeout per address.
+
+    The stock version tries every DNS address in turn with the full timeout, so a host
+    with six addresses that the server can't reach (common for IPv6 on cloud hosts)
+    stalls a request for minutes.
+    """
+    host, port = address
+    infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    infos.sort(key=lambda i: i[0] != socket.AF_INET)
+    err = None
+    for family, socktype, proto, _, addr in infos:
+        sock = socket.socket(family, socktype, proto)
+        try:
+            sock.settimeout(CONNECT_TIMEOUT)
+            if source_address:
+                sock.bind(source_address)
+            sock.connect(addr)
+            sock.settimeout(timeout)
+            return sock
+        except OSError as e:
+            err = e
+            sock.close()
+    raise err or OSError(f"no addresses for {host}")
+
+
+class _HTTPSConnection(http.client.HTTPSConnection):
+    _create_connection = staticmethod(_connect)
+
+
+class _HTTPSHandler(urllib.request.HTTPSHandler):
+    def https_open(self, req):
+        return self.do_open(_HTTPSConnection, req, context=self._context)
+
+
+_opener = urllib.request.build_opener(_HTTPSHandler)
+
+
 def _get(url, ttl):
     hit = _cache.get(url)
     if hit and time.time() - hit[0] < ttl:
         return hit[1]
     req = urllib.request.Request(url, headers=UA)
-    with urllib.request.urlopen(req, timeout=30) as r:
-        body = r.read().decode("utf-8", errors="replace")
+    t = time.time()
+    try:
+        with _opener.open(req, timeout=READ_TIMEOUT) as r:
+            body = r.read().decode("utf-8", errors="replace")
+    except Exception as e:
+        print(f"fetch FAILED {url} after {time.time() - t:.1f}s: {e!r}", file=sys.stderr, flush=True)
+        raise
+    print(f"fetch {url} {time.time() - t:.1f}s", file=sys.stderr, flush=True)
     _cache[url] = (time.time(), body)
     return body
 
