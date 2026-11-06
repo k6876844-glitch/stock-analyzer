@@ -75,7 +75,7 @@ def _connect(address, timeout=None, source_address=None, **kw):
     raise OSError(f"can't connect to {host}: " + "; ".join(errors or ["no addresses"]))
 
 
-def diagnose(hosts=("afx.kwayisi.org", "stockanalysis.com")):
+def diagnose(hosts=("afx.kwayisi.org", "stockanalysis.com", "scanner.tradingview.com")):
     """Test DNS and a TCP connect to every address of each source host."""
     out = {}
     for host in hosts:
@@ -98,6 +98,11 @@ def diagnose(hosts=("afx.kwayisi.org", "stockanalysis.com")):
             finally:
                 sock.close()
         out[host] = res
+    try:
+        out["tradingview_scan"] = f"ok, {len(_tradingview())} stocks"
+    except Exception as e:
+        body = e.read()[:300].decode("utf-8", "replace") if hasattr(e, "read") else ""
+        out["tradingview_scan"] = f"{e!r} {body}".strip()
     return out
 
 
