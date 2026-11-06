@@ -3,7 +3,7 @@
 Fundamentals for companies on the Nairobi Securities Exchange (Kenya): valuation, growth,
 profitability and balance-sheet health, scored against 12 rules of thumb.
 
-- Prices: afx.kwayisi.org
+- Prices: TradingView scanner, falling back to live.mystocks.co.ke, then afx.kwayisi.org
 - Fundamentals: stockanalysis.com
 
 Not investment advice.
