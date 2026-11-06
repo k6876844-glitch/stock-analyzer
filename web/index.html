@@ -313,6 +313,16 @@ let state = { results: [], active: 0, errors: {} };
 
 form.onsubmit = e => { e.preventDefault(); if (q.value.trim()) run(q.value); };
 
+// Fetch JSON; turn proxy error pages (HTML) and server errors into readable messages.
+async function getJSON(url) {
+  const r = await fetch(url);
+  let data;
+  try { data = await r.json(); }
+  catch { throw new Error(r.status >= 500 ? `server error ${r.status}, the server may be waking up; try again in a minute` : `unexpected response (${r.status})`); }
+  if (!r.ok) throw new Error(data.error || r.statusText);
+  return data;
+}
+
 async function run(text) {
   const syms = text.split(/[\s,]+/).map(s => s.trim().toUpperCase()).filter(Boolean);
   if (!syms.length) return;
@@ -320,9 +330,7 @@ async function run(text) {
   go.disabled = true; go.textContent = "Loading…";
   out.innerHTML = `<div class="grid"><div class="skeleton"></div><div class="grid g-2"><div class="skeleton"></div><div class="skeleton"></div></div></div>`;
   try {
-    const r = await fetch("/api/analyze?symbols=" + encodeURIComponent(syms.join(",")));
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error || r.statusText);
+    const data = await getJSON("/api/analyze?symbols=" + encodeURIComponent(syms.join(",")));
     state = { results: data.results, active: 0, errors: data.errors || {} };
     render();
   } catch (err) {
@@ -560,9 +568,7 @@ async function browseNSE(prefix = "") {
   out.innerHTML = prefix + `<div class="card fade-in"><div class="skeleton" style="height:240px;border:0"></div></div>`;
   try {
     if (!nseList) {
-      const r = await fetch("/api/nse/list"); const d = await r.json();
-      if (!r.ok) throw new Error(d.error || r.statusText);
-      nseList = d.stocks;
+      nseList = (await getJSON("/api/nse/list")).stocks;
     }
   } catch (err) {
     out.innerHTML = prefix + `<div class="error">Couldn't load the NSE listing: ${esc(err.message)}</div>`; return;
