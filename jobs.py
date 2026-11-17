@@ -69,14 +69,13 @@ def run_once(force_eod=False):
         label = f"{snap['data_status']} data, {snap['as_of']}"
         fired = alerts.evaluate(prices, avg, divs, label)
         state["alerts_fired"] += fired
-        # end-of-day: after the close on a trading day, store closes once
-        today = market.now_eat().strftime("%Y-%m-%d")
-        traded_today = market.last_trading_day() == today
-        after_close = status["state"] == "closed" and (market.now_eat().hour, market.now_eat().minute) >= (
-            market.CLOSE_AT[0], market.CLOSE_AT[1] + 15)
-        day = snap["as_of"] or today
-        done = db.kv_get("eod:" + day)
-        if (force_eod or (traded_today and after_close)) and not done:
+        # end-of-day: once the session is over (or on any later run, e.g. after the host
+        # slept through the close), store that session's closes once
+        session_over = status["state"] == "closed" and not (
+            market.last_trading_day() == market.now_eat().strftime("%Y-%m-%d")
+            and (market.now_eat().hour, market.now_eat().minute) < (market.CLOSE_AT[0], market.CLOSE_AT[1] + 15))
+        day = snap["as_of"]  # the exchange's own "statistics as of" date for these prices
+        if day and (force_eod or session_over) and not db.kv_get("eod:" + day):
             n = history.record_day(day, snap["stocks"])
             history.record_indices(day, snap["indices"])
             db.kv_set("eod:" + day, str(n), datetime.now(timezone.utc).isoformat())
