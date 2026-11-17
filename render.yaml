@@ -4,6 +4,17 @@ services:
     name: nse-stock-analyzer
     runtime: python
     plan: free
-    buildCommand: "echo 'no dependencies: standard library only'"
+    buildCommand: pip install -r requirements.txt
     startCommand: python server.py
     healthCheckPath: /
+    envVars:
+      - key: DATABASE_URL      # Neon Postgres connection string; without it data lives in SQLite and is lost on restart
+        sync: false
+      - key: SMTP_USER         # Gmail address that sends alert emails
+        sync: false
+      - key: SMTP_PASSWORD     # Gmail app password
+        sync: false
+      - key: CRON_SECRET       # key for /api/cron (external scheduler keeps alerts running)
+        generateValue: true
+      - key: APP_URL
+        value: https://nse-stock-analyzer-6dwk.onrender.com
