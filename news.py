@@ -7,8 +7,11 @@
 """
 import html
 import re
+import sys
+import time
+from concurrent.futures import ThreadPoolExecutor
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timedelta
 from email.utils import parsedate_to_datetime
 
 from nse import _get, MYSTOCKS
@@ -75,7 +78,55 @@ def cbk(limit=15):
 
 
 def corporate_calendar():
-    """Market-wide dividend / book-closure / payment events, newest first."""
+    """Market-wide dividend / book-closure / payment events, newest first.
+
+    From myStocks' corporate calendar; when myStocks is unreachable (it blocks some cloud
+    hosts), from stockanalysis.com's dividend history for the largest companies.
+    """
+    try:
+        return _mystocks_calendar()
+    except Exception as e:
+        print(f"corporate calendar: myStocks unavailable ({e!r}); using stockanalysis.com dividends",
+              file=sys.stderr, flush=True)
+    return dividend_events()
+
+
+_div_cache = {"at": 0.0, "key": None, "data": None}
+
+
+def dividend_events(symbols=None, top=25):
+    """Ex-dividend and payment dates from stockanalysis.com for `symbols` (default: the
+    `top` largest companies), within roughly the last six months and upcoming."""
+    import market
+    import fundamentals
+    if symbols is None:
+        caps = market.market_caps()
+        symbols = sorted(caps, key=lambda s: -caps[s])[:top]
+    key = tuple(sorted(symbols))
+    if _div_cache["key"] == key and time.time() - _div_cache["at"] < 6 * 3600:
+        return _div_cache["data"]
+    names = {k: v["name"] for k, v in market.listings().items()}
+    cutoff = (datetime.now() - timedelta(days=180)).strftime("%Y-%m-%d")
+
+    def one(sym):
+        out = []
+        for h in fundamentals.dividends(sym)["history"][:4]:
+            amt = h["amount"]
+            for d, label, kind in ((h["ex_date"], "Ex-dividend", "book closure"), (h["pay_date"], "Payment of", "payment")):
+                if d and d >= cutoff:
+                    out.append({"date": d, "symbol": sym, "company": names.get(sym, sym),
+                                "event": f"{label} KES {amt:,.2f} dividend" if amt is not None else f"{label} dividend",
+                                "kind": kind, "amount": amt, "source": "stockanalysis.com"})
+        return out
+
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        events = [e for evs in ex.map(one, symbols) for e in evs]
+    events.sort(key=lambda e: e["date"], reverse=True)
+    _div_cache.update(at=time.time(), key=key, data=events)
+    return events
+
+
+def _mystocks_calendar():
     page = _get(f"{MYSTOCKS}/m/calendar", NEWS_TTL)
     out = []
     for block in re.split(r"<h3>", page)[1:]:

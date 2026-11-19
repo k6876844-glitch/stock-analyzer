@@ -290,7 +290,29 @@ def _first(label, *sources):
 
 
 def list_stocks():
-    return _first("NSE list", ("TradingView", _tv_list), ("myStocks", _mystocks_list), ("afx", _afx_list))
+    return _first("NSE list", ("NSE", _nse_list), ("TradingView", _tv_list), ("myStocks", _mystocks_list),
+                  ("afx", _afx_list))
+
+
+def _nse_list():
+    import market
+    return [{"symbol": s["symbol"], "name": s["name"], "volume": s["volume"], "price": s["price"],
+             "change": s["change"]} for s in market.price_list_nse()["stocks"]]
+
+
+def _nse_price(sym):
+    """Price from the exchange's ticker API; 52-week range from TradingView's snapshot."""
+    import market
+    import tvdata
+    row = next((r for r in market.price_list_nse()["stocks"] if r["symbol"] == sym), None)
+    if not row:
+        raise LookupError(f"NSE feed has no price for {sym}")
+    tv, _ = tvdata.get(sym)
+    tv = tv or {}
+    return {"name": row["name"], "price": row["price"],
+            "52w_high": tv.get("week52_high"), "52w_low": tv.get("week52_low"),
+            "market_cap": tv.get("market_cap"), "eps": tv.get("eps"), "pe": tv.get("pe"), "dps": None,
+            "sector": row["sector"], "industry": tv.get("tv_industry")}
 
 
 def _tv_list():
@@ -332,7 +354,7 @@ def _afx_list():
 
 def _price(sym):
     try:
-        return _first(f"price {sym}", ("TradingView", lambda: _tv_price(sym)),
+        return _first(f"price {sym}", ("NSE", lambda: _nse_price(sym)), ("TradingView", lambda: _tv_price(sym)),
                       ("myStocks", lambda: _mystocks_price(sym)), ("afx", lambda: _afx_price(sym)))
     except ConnectionError:
         raise ConnectionError("couldn't reach any NSE price source; try again in a few minutes") from None

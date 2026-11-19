@@ -1,0 +1,286 @@
+{
+ "ABSA": {
+  "name": "ABSA Bank Kenya Plc",
+  "sector": "Banking"
+ },
+ "ALP": {
+  "name": "Africa Logistics Properties Industrial I-REIT",
+  "sector": "Real Estate Investment Trusts"
+ },
+ "AMAC": {
+  "name": "Africa Mega Agricorp Plc",
+  "sector": "Manufacturing and Allied"
+ },
+ "ARM": {
+  "name": "ARM Cement Plc",
+  "sector": "Construction and Allied"
+ },
+ "BAMB": {
+  "name": "Bamburi Cement",
+  "sector": "Construction and Allied"
+ },
+ "BAT": {
+  "name": "British American Tobacco Kenya Plc",
+  "sector": "Manufacturing and Allied"
+ },
+ "BKG": {
+  "name": "BK Group Plc",
+  "sector": "Banking"
+ },
+ "BOC": {
+  "name": "BOC Kenya Plc",
+  "sector": "Manufacturing and Allied"
+ },
+ "BRIT": {
+  "name": "Britam Holdings Plc",
+  "sector": "Insurance"
+ },
+ "CABL": {
+  "name": "East African Cables Plc",
+  "sector": "Construction and Allied"
+ },
+ "CARB": {
+  "name": "Carbacid Investments Plc",
+  "sector": "Manufacturing and Allied"
+ },
+ "CGEN": {
+  "name": "Car and General",
+  "sector": "Automobiles and Accessories"
+ },
+ "CIC": {
+  "name": "CIC Insurance",
+  "sector": "Insurance"
+ },
+ "COOP": {
+  "name": "Co-operative Bank",
+  "sector": "Banking"
+ },
+ "CRWN": {
+  "name": "Crown Paints Kenya Plc",
+  "sector": "Construction and Allied"
+ },
+ "CTUM": {
+  "name": "Centum Investment Company Plc",
+  "sector": "Investment"
+ },
+ "DCON": {
+  "name": "Deacons",
+  "sector": "Commercial and Services"
+ },
+ "DTK": {
+  "name": "Diamond Trust Bank",
+  "sector": "Banking"
+ },
+ "EABL": {
+  "name": "East African Breweries",
+  "sector": "Manufacturing and Allied"
+ },
+ "EGAD": {
+  "name": "Eaagads",
+  "sector": "Agricultural"
+ },
+ "EQTY": {
+  "name": "Equity Group Holdings Plc",
+  "sector": "Banking"
+ },
+ "EVRD": {
+  "name": "Eveready East Africa",
+  "sector": "Commercial and Services"
+ },
+ "FAHR": {
+  "name": "ILAM Fahari I-REIT",
+  "sector": "Real Estate Investment Trusts"
+ },
+ "FMLY": {
+  "name": "Family Bank Limited",
+  "sector": "Banking"
+ },
+ "FTGH": {
+  "name": "Flame Tree Group",
+  "sector": "Manufacturing and Allied"
+ },
+ "GLD": {
+  "name": "ABSA NewGold ETF",
+  "sector": "Exchange Traded Funds"
+ },
+ "HAFR": {
+  "name": "Home Afrika",
+  "sector": "Investment"
+ },
+ "HBE": {
+  "name": "Homeboyz Entertainment Plc",
+  "sector": "Commercial and Services"
+ },
+ "HFCB": {
+  "name": "HFCB Group Plc",
+  "sector": "Banking"
+ },
+ "IMH": {
+  "name": "I & M Holdings Plc",
+  "sector": "Banking"
+ },
+ "JUB": {
+  "name": "Jubilee",
+  "sector": "Insurance"
+ },
+ "KAPC": {
+  "name": "Kapchorua Tea Kenya Plc",
+  "sector": "Agricultural"
+ },
+ "KCB": {
+  "name": "KCB Group Plc",
+  "sector": "Banking"
+ },
+ "KEGN": {
+  "name": "Kenya Electricity Generating Company Plc",
+  "sector": "Energy and Petroleum"
+ },
+ "KNRE": {
+  "name": "Kenya Re-Insurance",
+  "sector": "Insurance"
+ },
+ "KPC": {
+  "name": "Kenya Pipeline Company Plc",
+  "sector": "Energy and Petroleum"
+ },
+ "KPLC": {
+  "name": "Kenya Power and Lighting Company Plc",
+  "sector": "Energy and Petroleum"
+ },
+ "KQ": {
+  "name": "Kenya Airways Plc",
+  "sector": "Commercial and Services"
+ },
+ "KUKZ": {
+  "name": "Kakuzi Plc",
+  "sector": "Agricultural"
+ },
+ "KURV": {
+  "name": "Kurwitu Ventures",
+  "sector": "Investment"
+ },
+ "LAPR": {
+  "name": "LAPTrust Imara Income-REIT",
+  "sector": "Real Estate Investment Trusts"
+ },
+ "LBTY": {
+  "name": "Liberty Kenya",
+  "sector": "Insurance"
+ },
+ "LIMT": {
+  "name": "Limuru Tea Plc",
+  "sector": "Agricultural"
+ },
+ "LKL": {
+  "name": "Longhorn Publishers Plc",
+  "sector": "Commercial and Services"
+ },
+ "MSC": {
+  "name": "Mumias Sugar",
+  "sector": "Manufacturing and Allied"
+ },
+ "NBV": {
+  "name": "Nairobi Business Ventures",
+  "sector": "Commercial and Services"
+ },
+ "NCBA": {
+  "name": "NCBA Group Plc",
+  "sector": "Banking"
+ },
+ "NMG": {
+  "name": "Nation Media Group Plc",
+  "sector": "Commercial and Services"
+ },
+ "NSE": {
+  "name": "Nairobi Securities Exchange Plc",
+  "sector": "Investment Services"
+ },
+ "OCH": {
+  "name": "Olympia Capital",
+  "sector": "Investment"
+ },
+ "PORT": {
+  "name": "East African Portland Cement",
+  "sector": "Construction and Allied"
+ },
+ "QMRT": {
+  "name": "Quick Mart Plc",
+  "sector": "Commercial and Services"
+ },
+ "SASN": {
+  "name": "Sasini Plc",
+  "sector": "Agricultural"
+ },
+ "SBIC": {
+  "name": "Stanbic Holdings Plc",
+  "sector": "Banking"
+ },
+ "SCAN": {
+  "name": "WPP ScanGroup Plc",
+  "sector": "Commercial and Services"
+ },
+ "SCBK": {
+  "name": "Standard Chartered Bank",
+  "sector": "Banking"
+ },
+ "SCOM": {
+  "name": "Safaricom Plc",
+  "sector": "Telecommunication"
+ },
+ "SGL": {
+  "name": "Standard Group Plc",
+  "sector": "Commercial and Services"
+ },
+ "SKL": {
+  "name": "Shri Krishana Overseas Plc",
+  "sector": "Manufacturing and Allied"
+ },
+ "SLAM": {
+  "name": "Sanlam Allianz Holdings",
+  "sector": "Insurance"
+ },
+ "SMER": {
+  "name": "Sameer Africa Plc",
+  "sector": "Commercial and Services"
+ },
+ "SMWF": {
+  "name": "Satrix MSCI World Feeder ETF",
+  "sector": "Exchange Traded Funds"
+ },
+ "TCL": {
+  "name": "Trans-Century Plc",
+  "sector": "Investment"
+ },
+ "TOTL": {
+  "name": "TotalEnergies Marketing Kenya Plc",
+  "sector": "Energy and Petroleum"
+ },
+ "TPSE": {
+  "name": "TPS Eastern Africa",
+  "sector": "Commercial and Services"
+ },
+ "TRFC": {
+  "name": "Two Rivers Internat'l Finance & Innovation Center",
+  "sector": "Real Estate Investment Trusts"
+ },
+ "UCHM": {
+  "name": "Uchumi Supermarket Plc",
+  "sector": "Commercial and Services"
+ },
+ "UMME": {
+  "name": "Umeme",
+  "sector": "Energy and Petroleum"
+ },
+ "UNGA": {
+  "name": "Unga",
+  "sector": "Manufacturing and Allied"
+ },
+ "WTK": {
+  "name": "Williamson Tea Kenya Plc",
+  "sector": "Agricultural"
+ },
+ "XPRS": {
+  "name": "Express Kenya Plc",
+  "sector": "Commercial and Services"
+ }
+}

@@ -26,7 +26,8 @@ source doesn't publish is shown as unavailable.
 
 | Source | Used for | Notes |
 |---|---|---|
-| live.mystocks.co.ke | prices, quotes, sectors, corporate actions | delayed during trading, end-of-day after |
+| NSE ticker API (nsenairobi.nse.co.ke) | prices, previous close, open/high/low, volume, turnover, market status | the exchange's own feed; primary |
+| live.mystocks.co.ke | fallback prices, quote extras, corporate calendar | blocks some cloud hosts (Render); optional |
 | www.nse.co.ke | index values, turnover, shares traded | official |
 | stockanalysis.com | fundamentals, dividends, market caps | |
 | TradingView scanner | indicators and fundamentals fallback | rate-limits Render; cached, plus a daily snapshot file |
@@ -34,6 +35,7 @@ source doesn't publish is shown as unavailable.
 | Google News, CBK RSS | news | |
 
 Bid/ask prices aren't published by any free source, so they show as unavailable.
+Company names and sectors come from `data/listings.json` (`python scripts/build_listings.py`).
 
 ## Run locally
 

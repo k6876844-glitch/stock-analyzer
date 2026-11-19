@@ -33,6 +33,9 @@ def log(msg):
 def _new_dividend_events():
     """Corporate-calendar events not seen before. The very first run only records them."""
     events = news.corporate_calendar()
+    watched = alerts.symbols_with("dividend")
+    if watched and not any(e["source"] == "live.mystocks.co.ke" for e in events):
+        events += news.dividend_events(watched)  # fallback list may not cover alerted stocks
     first_run = not db.one("SELECT 1 AS x FROM corporate_actions LIMIT 1")
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     fresh = {}

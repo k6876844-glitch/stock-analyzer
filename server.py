@@ -163,7 +163,12 @@ def r_stock_news(h, q, user, sym):
     qd = market.quote(sym)
     items = news.company(qd["name"], sym.upper())
     cal = [e for e in news.corporate_calendar() if e["symbol"] == sym.upper()]
-    return {"news": items, "corporate_actions": cal or market.corporate_actions(sym)}
+    if not cal:
+        try:
+            cal = [dict(e, symbol=sym.upper()) for e in market.corporate_actions(sym)]
+        except Exception:
+            cal = news.dividend_events([sym.upper()])
+    return {"news": items, "corporate_actions": cal}
 
 
 @route("GET", "/api/screener")
@@ -207,7 +212,8 @@ def r_news(h, q, user):
 
 @route("GET", "/api/calendar")
 def r_calendar(h, q, user):
-    return {"events": news.corporate_calendar(), "source": "live.mystocks.co.ke"}
+    ev = news.corporate_calendar()
+    return {"events": ev, "source": ev[0]["source"] if ev else None}
 
 
 @route("GET", "/api/analyst/stock/" + SYM)
@@ -437,9 +443,19 @@ def r_health(h, q, user):
     return {"commit": os.environ.get("RENDER_GIT_COMMIT", "local"), "database": dbs,
             "email_configured": mailer.enabled(), "jobs": jobs.state,
             "tradingview": {"as_of": tv["fetched_at"], "source": tv["source"], "stocks": len(tv["data"] or {})},
-            "network": nse.diagnose(("stockanalysis.com", "scanner.tradingview.com", "live.mystocks.co.ke",
+            "prices": _price_health(),
+            "network": nse.diagnose(("nsenairobi.nse.co.ke", "stockanalysis.com", "scanner.tradingview.com", "live.mystocks.co.ke",
                                      "www.nse.co.ke", "news.google.com", "www.centralbank.go.ke",
                                      "afx.kwayisi.org"))}
+
+
+def _price_health():
+    try:
+        snap = service.snapshot()
+        return {"ok": True, "source": snap.get("prices_source"), "time": snap.get("prices_time"),
+                "stocks": len(snap["stocks"])}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 
 @route("GET", "/api/cron")

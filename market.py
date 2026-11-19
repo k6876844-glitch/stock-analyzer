@@ -1,12 +1,19 @@
 """Live market data for the Nairobi Securities Exchange.
 
-Sources (all public, all reachable from the Render host as of Nov 2026):
-  * live.mystocks.co.ke  - price list with sectors, per-stock quote details (open, previous
-                           close, day range, volume, turnover, deals, 52-week range,
-                           average volume, shares issued, profile), corporate actions
+Sources, in order of preference:
+  * NSE ticker API       - the exchange's own feed behind the price ticker on nse.co.ke
+    (nsenairobi.nse.co.ke) last price, previous close, open, high, low, volume, turnover
+                           and market status for every security, in one request
   * www.nse.co.ke        - official index values (NASI, NSE 20, NSE 25), total shares
                            traded and equity turnover
-  * stockanalysis.com    - market capitalisation for every listing in one request
+  * live.mystocks.co.ke  - fallback price list; per-stock extras (deals, 52-week range,
+                           average volume, shares issued, profile) and corporate actions.
+                           It blocks some cloud hosts (Render, Nov 2026), so every use of it
+                           is optional and has a fallback
+  * stockanalysis.com    - market capitalisation, company descriptions
+  * TradingView snapshot - 52-week range and average volume when myStocks is unreachable
+  * data/listings.json   - names and sectors (the NSE feed has tickers only); built by
+                           scripts/build_listings.py
 
 Nothing here invents a number: a field the sources don't publish is None, and every
 quote says where it came from, when, and whether it is live, delayed or end-of-day.
@@ -16,7 +23,9 @@ import json
 import os
 import re
 import time
+import sys
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import nse
 from nse import _get, _n, _text, SYMBOL_RE, MYSTOCKS
@@ -27,6 +36,12 @@ QUOTE_TTL = 60
 SLOW_TTL = 6 * 3600    # profiles, market caps
 NSE_SITE = "https://www.nse.co.ke/"
 SA_LIST = "https://stockanalysis.com/list/nairobi-stock-exchange/"
+NSE_TICKER = "https://nsenairobi.nse.co.ke/nseticker/api/v1/ticker"
+# the ticker widget on nse.co.ke sends the exchange's own ISIN; the API requires one
+NSE_TICKER_BODY = json.dumps({"nopage": "true", "isinno": "KE3000009674"}).encode()
+NSE_TICKER_HEADERS = {"Content-Type": "application/json", "Accept": "application/json",
+                      "Origin": "https://www.nse.co.ke", "Referer": "https://www.nse.co.ke/"}
+LISTINGS_FILE = Path(__file__).parent / "data" / "listings.json"
 
 INDEX_NAMES = {"NASI": "NSE All Share Index", "N20I": "NSE 20 Share Index",
                "N25I": "NSE 25 Share Index", "N10I": "NSE 10 Share Index",
@@ -110,8 +125,72 @@ def _freshness(stamp_text):
 
 # ---------- price list (all stocks, one request) ----------
 
+def _log(msg):
+    print(msg, file=sys.stderr, flush=True)
+
+
+def listings():
+    """{symbol: {name, sector}} from data/listings.json."""
+    try:
+        return json.loads(LISTINGS_FILE.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
 def price_list():
-    """Every NSE listing with sector, last price, % change and volume."""
+    """Every NSE listing with price data: the exchange's feed first, myStocks as fallback."""
+    errors = []
+    for name, fn in (("NSE ticker API", price_list_nse), ("myStocks", price_list_mystocks)):
+        try:
+            return fn()
+        except Exception as e:
+            errors.append(f"{name}: {e}")
+            _log(f"price list: {name} failed: {e!r}")
+    raise RuntimeError("no NSE price source reachable (" + "; ".join(errors) + ")")
+
+
+def price_list_nse():
+    """Prices for every security from the NSE's own ticker API (nsenairobi.nse.co.ke)."""
+    msg = json.loads(_get(NSE_TICKER, LIST_TTL, data=NSE_TICKER_BODY, extra_headers=NSE_TICKER_HEADERS))["message"]
+    snap = msg[0]["snapshot"]
+    meta = (msg[1].get("updated_at") if len(msg) > 1 else None) or {}
+    known = listings()
+    stocks, seen = [], set()
+    for r in snap:
+        sym = (r.get("issuer") or "").strip().upper()
+        price = r.get("price") if r.get("price") is not None else r.get("ltp")
+        # the feed repeats some tickers (preference shares share the parent's code, and
+        # some rows are empty copies); the first priced row is the ordinary share
+        if not SYMBOL_RE.match(sym) or sym in seen or price is None:
+            continue
+        if known and sym not in known:
+            continue  # retired codes still in the feed (e.g. NBK, HFCK)
+        seen.add(sym)
+        prev = r.get("prev_price")
+        info = known.get(sym, {})
+        stocks.append({
+            "symbol": sym, "name": info.get("name", sym), "sector": info.get("sector"),
+            "price": float(price),
+            "change": round(price - prev, 4) if prev else 0.0,
+            "change_pct": (price - prev) / prev if prev else 0.0,
+            "prev_close": prev, "open": r.get("today_open"), "high": r.get("today_high"),
+            "low": r.get("today_low"), "volume": r.get("volume") or None, "turnover": r.get("turnover"),
+        })
+    if not stocks:
+        raise RuntimeError("the NSE ticker API returned no prices")
+    as_of = None
+    try:
+        as_of = datetime.strptime(meta.get("date", ""), "%d/%m/%Y").strftime("%Y-%m-%d")
+    except ValueError:
+        pass
+    st = (meta.get("market_status") or "").lower()
+    return {"stocks": stocks, "indices": {}, "source": "NSE ticker API (nsenairobi.nse.co.ke)",
+            "source_time": f"{meta.get('date', '')} {meta.get('time', '')}".strip() or None,
+            "source_says_open": (st == "open") if st else None, "as_of": as_of}
+
+
+def price_list_mystocks():
+    """Every NSE listing with sector, last price, % change and volume from myStocks."""
     page = _get(f"{MYSTOCKS}/m/pricelist", LIST_TTL)
     names = {v: html.unescape(n).strip()
              for v, n in re.findall(r"<option value=([A-Z0-9-]+)>([^<\n]+)", page)}
@@ -147,7 +226,7 @@ def price_list():
     stamp = re.search(r"(\d{1,2}:\d\d [AP]M EAT)\s*-\s*market (open|closed)", page)
     return {"stocks": stocks, "indices": indices, "source": "live.mystocks.co.ke",
             "source_time": stamp.group(1) if stamp else None,
-            "source_says_open": (stamp.group(2) == "open") if stamp else None}
+            "source_says_open": (stamp.group(2) == "open") if stamp else None, "as_of": None}
 
 
 # ---------- official exchange statistics ----------
@@ -195,6 +274,27 @@ def market_caps():
     return caps
 
 
+def sa_names():
+    page = _get(SA_LIST, SLOW_TTL)
+    return {sym: html.unescape(n) for sym, n in re.findall(r's:"nase/([A-Z0-9.]+)",n:"([^"]*)"', page)}
+
+
+def sa_profile(sym):
+    """Company description from stockanalysis.com (fallback when myStocks is unreachable)."""
+    try:
+        page = _get(f"https://stockanalysis.com/quote/nase/{sym}/company/", SLOW_TTL)
+    except Exception:
+        return None, None
+    i = page.find("Company Description")
+    if i < 0:
+        return None, None
+    start = page.find("<p", i)
+    end = page.find("</div>", start)
+    frag = page[start:end] if start > 0 and end > start else ""
+    fy = re.search(r">Fiscal Year\s*</td>\s*<td[^>]*>([^<]+)<", page)
+    return _paragraphs(frag) or None, (fy.group(1).strip() if fy else None)
+
+
 # ---------- one stock in detail ----------
 
 def quote(sym):
@@ -202,58 +302,91 @@ def quote(sym):
     sym = sym.upper()
     if not SYMBOL_RE.match(sym):
         raise ValueError(f"invalid ticker '{sym}'")
-    # price, change and direction come from the price list: the mobile quote page omits
-    # the change for unchanged stocks and truncates prices of 100 or more ("KES 100" for 100.25)
-    row = next((r for r in price_list()["stocks"] if r["symbol"] == sym), None)
+    pl = price_list()
+    row = next((r for r in pl["stocks"] if r["symbol"] == sym), None)
     if row is None:
         raise ValueError(f"'{sym}' is not listed on the NSE")
+    price = row["price"]
+    q = {
+        "symbol": sym, "name": row["name"], "sector": row["sector"], "segment": None,
+        "price": price, "change": row["change"], "change_pct": row["change_pct"],
+        "prev_close": row.get("prev_close"), "open": row.get("open"), "average": None,
+        "high": row.get("high"), "low": row.get("low"),
+        "volume": row["volume"], "turnover": row.get("turnover"), "deals": None,
+        "week52_low": None, "week52_high": None, "avg_volume": None, "shares_issued": None,
+        "beta": None, "year_end": None, "profile": None,
+        # no free source publishes the order book, so bid/ask stay unavailable
+        "bid": None, "ask": None,
+        "source": pl["source"], "extras_source": None,
+    }
+    # extras from myStocks' quote page (optional: it blocks some hosts)
+    try:
+        _mystocks_extras(sym, q, row)
+        q["extras_source"] = "live.mystocks.co.ke"
+    except Exception as e:
+        _log(f"quote {sym}: myStocks extras unavailable: {e!r}")
+        _fallback_extras(sym, q)
+    if q["prev_close"] and price is not None and pl["source"].startswith("live.mystocks"):
+        # myStocks' list gives a rounded %; the quote page's previous close is exact
+        q["change"], q["change_pct"] = round(price - q["prev_close"], 4), (price - q["prev_close"]) / q["prev_close"]
+    st = market_status()
+    if pl.get("source_says_open") is False and st["state"] == "open":
+        st = dict(st, state="closed")
+    q["data_status"] = "delayed" if st["state"] == "open" else "end-of-day"
+    q["as_of"] = pl.get("as_of") or q.get("as_of") or last_trading_day()
+    if q["shares_issued"] and price:
+        q["market_cap"] = q["shares_issued"] * price
+    else:
+        q["market_cap"] = market_caps().get(sym)
+    q["close"] = price if q["data_status"] == "end-of-day" else None
+    return q
+
+
+def _mystocks_extras(sym, q, row):
     m_page = _get(f"{MYSTOCKS}/m/stock={sym}", QUOTE_TTL)
     info = {k.replace("&nbsp;", " ").strip(": "): v for k, v in
             re.findall(r"<th>([^<]+)</th>\s*<td>([^<]*)</td>", m_page)}
+    if not info:
+        raise ValueError("no quote data on the page")
     rng = re.findall(r"<th>(Day|52-week):</th>\s*<td>([\d.,]+) - ([\d.,]+)</td>", m_page)
     ranges = {k: (_n(lo), _n(hi)) for k, lo, hi in rng}
-    stamp = re.search(r"<div id=mktTime>([^<]+)</div>", m_page)
-    status, as_of = _freshness(stamp.group(1) if stamp else "")
     name = re.search(r"<title>(.*?) \(" + re.escape(sym) + r"\)", m_page)
     sector = re.search(r"<strong>Sector:</strong>\s*([^<]+)<br", m_page)
     segment = re.search(r"<strong>Sector:</strong>[^<]*<br />\s*([^<]+)</div>", m_page)
     # the profile is a run of <p>/<h3> paragraphs; stop at the first other element
     profile = re.search(r"<h2>Profile</h2>(.*?)(?:<div|<select|<script|<form|<h2>|$)", m_page, re.S)
-    price, change, pct = row["price"], row["change"], row["change_pct"]
-    prev = _n(info.get("Previous"))
-    if prev and price is not None:  # exact, unlike the change implied by a rounded % figure
-        change, pct = round(price - prev, 4), (price - prev) / prev
-    q = {
-        "symbol": sym,
-        "name": html.unescape(name.group(1)).strip() if name else row["name"],
-        "sector": html.unescape(sector.group(1)).strip() if sector else row["sector"],
-        "segment": html.unescape(segment.group(1)).strip() if segment else None,
-        "price": price, "change": change, "change_pct": pct,
-        "prev_close": prev, "open": _n(info.get("Open")),
-        "average": _n(info.get("Average")),
-        "high": ranges.get("Day", (None, None))[1], "low": ranges.get("Day", (None, None))[0],
-        "volume": row["volume"] if row["volume"] is not None else _n(info.get("Volume")),
-        "turnover": _n(info.get("Turnover")),
-        "deals": _n(info.get("Deals")),
-        "week52_low": ranges.get("52-week", (None, None))[0],
-        "week52_high": ranges.get("52-week", (None, None))[1],
-        "avg_volume": _n(info.get("Average Volume")),
-        "shares_issued": _n(info.get("Shares Issued")),
-        "beta": _n(info.get("BETA")),
-        "year_end": (info.get("Year End") or "").strip() or None,
-        "profile": _paragraphs(profile.group(1)) if profile else None,
-        # myStocks shows the order book only to logged-in members, so bid/ask are not public
-        "bid": None, "ask": None,
-        "data_status": status, "as_of": as_of,
-        "source": "live.mystocks.co.ke",
-    }
-    if q["shares_issued"] and price:
-        q["market_cap"] = q["shares_issued"] * price
-    else:
-        q["market_cap"] = market_caps().get(sym)
-    # mystocks rounds the day range to the trade prices; close is the last price on EOD data
-    q["close"] = price if status == "end-of-day" else None
-    return q
+    if name:
+        q["name"] = html.unescape(name.group(1)).strip()
+    if sector:
+        q["sector"] = html.unescape(sector.group(1)).strip()
+    q["segment"] = html.unescape(segment.group(1)).strip() if segment else None
+    # fill only what the primary feed lacks (the NSE feed is authoritative for the day's numbers)
+    for key, val in (("prev_close", _n(info.get("Previous"))), ("open", _n(info.get("Open"))),
+                     ("high", ranges.get("Day", (None, None))[1]), ("low", ranges.get("Day", (None, None))[0]),
+                     ("volume", _n(info.get("Volume"))), ("turnover", _n(info.get("Turnover")))):
+        if q.get(key) is None:
+            q[key] = val
+    q["average"] = _n(info.get("Average"))
+    q["deals"] = _n(info.get("Deals"))
+    q["week52_low"], q["week52_high"] = ranges.get("52-week", (None, None))
+    q["avg_volume"] = _n(info.get("Average Volume"))
+    q["shares_issued"] = _n(info.get("Shares Issued"))
+    q["beta"] = _n(info.get("BETA"))
+    q["year_end"] = (info.get("Year End") or "").strip() or None
+    q["profile"] = _paragraphs(profile.group(1)) if profile else None
+    stamp = re.search(r"<div id=mktTime>([^<]+)</div>", m_page)
+    q["as_of"] = _freshness(stamp.group(1) if stamp else "")[1]
+
+
+def _fallback_extras(sym, q):
+    import tvdata
+    tv, _ = tvdata.get(sym)
+    if tv:
+        q["week52_low"], q["week52_high"] = tv.get("week52_low"), tv.get("week52_high")
+        q["avg_volume"] = tv.get("avg_volume_30d")
+        q["extras_source"] = "TradingView snapshot (52-week range, 30-day average volume)"
+    prof, fy = sa_profile(sym)
+    q["profile"], q["year_end"] = prof, fy
 
 
 def _paragraphs(fragment):
@@ -311,12 +444,15 @@ def market_snapshot():
                          "change_pct": pct, "source": "live.mystocks.co.ke"}
     traded = [s for s in pl["stocks"] if s["volume"]]
     status = market_status()
+    if pl.get("source_says_open") is True and status["state"] != "open":
+        status = dict(status, state="open", note="the exchange reports the market open")
     if pl.get("source_says_open") is False and status["state"] == "open":
         status = dict(status, state="closed", note="the exchange reports the market closed")
     return {
         "status": status,
         "data_status": "delayed" if status["state"] == "open" else "end-of-day",
-        "as_of": ex.get("as_of") or last_trading_day(),
+        "as_of": pl.get("as_of") or ex.get("as_of") or last_trading_day(),
+        "prices_source": pl["source"], "prices_time": pl.get("source_time"),
         "fetched_at": now_eat().isoformat(timespec="seconds"),
         "indices": idx,
         "total_market_cap": sum(caps.values()) or None,
@@ -332,6 +468,6 @@ def market_snapshot():
         "losers": sorted([s for s in traded if s["change_pct"] < 0], key=lambda s: s["change_pct"])[:8],
         "most_traded": sorted(traded, key=lambda s: -(s["volume"] or 0))[:8],
         "stocks": pl["stocks"],
-        "sources": ["www.nse.co.ke (indices, turnover)", "live.mystocks.co.ke (prices)",
+        "sources": ["www.nse.co.ke (indices, turnover)", pl["source"] + " (prices)",
                     "stockanalysis.com (market caps)"],
     }

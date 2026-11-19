@@ -74,6 +74,12 @@ def dividends(sym):
             "by_year": [{"year": int(y), "total": round(v, 4)} for y, v in sorted(by_year.items())]}
 
 
+def _latest(base, key):
+    """Newest value of an annual series from nse.fetch's history, or None."""
+    vals = (base.get("history") or {}).get(key) or []
+    return vals[0] if vals else None
+
+
 def full(sym, price=None):
     """Everything fundamental for one stock, with per-field sources."""
     sym = sym.upper()
@@ -101,7 +107,7 @@ def full(sym, price=None):
 
     SAc, TVc = "stockanalysis.com", "TradingView"
     px = price or base.get("price") or tv.get("close")
-    eps = pick("eps", (SAc, (base.get("history") or {}).get("eps", [None])[0] if base.get("history") else None),
+    eps = pick("eps", (SAc, _latest(base, "eps")),
                (TVc, tv.get("eps")))
     m = {
         "price_used": px,
@@ -118,9 +124,9 @@ def full(sym, price=None):
                                (TVc, tv.get("dividend_yield"))),
         "annual_dividend": pick("annual_dividend", (SAc, dv["summary"].get("annual"))),
         "payout_ratio": pick("payout_ratio", (SAc, base.get("payout_ratio")), (SAc, dv["summary"].get("payout_ratio"))),
-        "revenue": pick("revenue", (SAc, (base.get("history") or {}).get("revenue", [None])[0] if base.get("history") else None),
+        "revenue": pick("revenue", (SAc, _latest(base, "revenue")),
                         (TVc, tv.get("revenue"))),
-        "net_income": pick("net_income", (SAc, (base.get("history") or {}).get("net_income", [None])[0] if base.get("history") else None),
+        "net_income": pick("net_income", (SAc, _latest(base, "net_income")),
                            (TVc, tv.get("net_income"))),
         "total_assets": pick("total_assets", (SAc, bs.get("total_assets_latest")),
                              (SAc, (bs.get("total_assets") or [None])[0]), (TVc, tv.get("total_assets"))),

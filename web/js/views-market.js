@@ -31,7 +31,7 @@ export async function dashboard(main) {
     </div>`;
   const draw = d => {
     state.market = d; state.stocks = d.stocks;
-    $("#strip").innerHTML = `${marketPill(d.status)} ${dataPill(d.data_status, d.as_of)}
+    $("#strip").innerHTML = `${marketPill(d.status)} ${dataPill(d.data_status, d.as_of)} <span class="tiny muted">Prices: ${esc(d.prices_source || "")}</span>
       <span class="tiny">Updated ${esc(fmtDate(d.fetched_at, true))} · ${esc(d.status.note)}${d.status.next_open ? " · next open " + esc(fmtDate(d.status.next_open, true)) : ""}</span>
       <span class="tiny muted">Bid/ask quotes aren't published by free sources.</span>`;
     const idx = d.indices;
@@ -128,7 +128,7 @@ export async function stockPage(main, sym) {
   const lo = q.week52_low, hi = q.week52_high;
   const pos = isNum(lo) && isNum(hi) && hi > lo && isNum(q.price) ? Math.min(1, Math.max(0, (q.price - lo) / (hi - lo))) : null;
   main.innerHTML = `
-    <div class="status-strip">${dataPill(q.data_status, q.as_of)} <span class="tiny">Source: ${esc(q.source)}</span></div>
+    <div class="status-strip">${dataPill(q.data_status, q.as_of)} <span class="tiny">Prices: ${esc(q.source)}${q.extras_source ? " · 52-week range &amp; averages: " + esc(q.extras_source) : ""}</span></div>
     <div class="card hero fade-in">
       <div><span class="ticker-badge">NSE: ${esc(sym)}</span>
         <h1>${esc(q.name)}</h1><div class="muted small">${esc([q.sector, q.segment].filter(Boolean).join(" · "))}</div>
@@ -462,7 +462,7 @@ export async function screenerPage(main) {
 export async function newsPage(main) {
   const tabs = [["market", "NSE & markets"], ["earnings", "Earnings"], ["dividends", "Dividends"], ["cbk", "Central Bank of Kenya"], ["economy", "Economy & inflation"], ["calendar", "Corporate calendar"]];
   const start = params().get("tab") || "market";
-  main.innerHTML = `<h1>News &amp; market events</h1><p class="lede">Headlines link to the original publishers. Corporate actions come from the NSE corporate calendar (myStocks).</p>
+  main.innerHTML = `<h1>News &amp; market events</h1><p class="lede">Headlines link to the original publishers. Dividend dates come from the NSE corporate calendar (myStocks) or, when that's unreachable, from stockanalysis.com.</p>
     <div class="tabs">${tabs.map(([k, l]) => `<button data-k="${k}" aria-selected="${k === start}">${l}</button>`).join("")}</div><div id="newsOut"></div>`;
   const show = async k => {
     $$(".tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.k === k));
@@ -472,7 +472,7 @@ export async function newsPage(main) {
         const d = await api("/api/calendar");
         const today = new Date().toISOString().slice(0, 10);
         const up = d.events.filter(e => e.date >= today).reverse(), past = d.events.filter(e => e.date < today);
-        $("#newsOut").innerHTML = `<div class="grid g-2"><div class="card"><h2><span class="dot"></span>Upcoming</h2>${eventList(up)}</div>
+        $("#newsOut").innerHTML = `<p class="tiny muted">Source: ${esc(d.source || "n/a")}</p><div class="grid g-2"><div class="card"><h2><span class="dot"></span>Upcoming</h2>${eventList(up)}</div>
           <div class="card"><h2><span class="dot"></span>Recent</h2><div class="scroll-y">${eventList(past)}</div></div></div>`;
       } else {
         const d = await api("/api/news?topic=" + k);
