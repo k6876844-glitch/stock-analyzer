@@ -338,12 +338,14 @@ def market_report():
     paras = [
         f"Market status: {snap['status']['state']} ({snap['status']['note']}). Data as of {snap['as_of']} "
         f"({snap['data_status']}).",
-        (f"The NSE All Share Index (NASI) closed at {num(nasi.get('value'))}, {pct(nasi.get('change_pct'), 2)} on the day. "
-         if nasi else "")
+        (f"The NSE All Share Index (NASI) closed at {num(nasi.get('value'))}, {pct(nasi.get('change_pct'), 2)} on the day"
+         + (f" (exchange statistics as of {snap['stats_as_of']})" if snap.get("stats_as_of") and snap["stats_as_of"] != snap["as_of"] else "")
+         + ". " if nasi else "")
         + "; ".join(f"{v['name']} {num(v['value'])} ({pct(v.get('change_pct'), 2)})" for k, v in idx.items() if k in ("N20I", "N25I"))
         + ".",
         f"Breadth was {breadth}: {adv} stocks rose, {dec} fell and {snap['unchanged']} were unchanged; "
         f"{snap['not_traded']} did not trade. Equity turnover was {kes(snap.get('equity_turnover'))}"
+        + (f" (as of {snap['stats_as_of']})" if snap.get("stats_as_of") and snap["stats_as_of"] != snap["as_of"] else "")
         + (f" versus {kes(snap.get('equity_turnover_prev'))} in the previous session." if snap.get("equity_turnover_prev") else "."),
     ]
     if snap["gainers"]:

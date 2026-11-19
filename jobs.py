@@ -80,7 +80,8 @@ def run_once(force_eod=False):
         day = snap["as_of"]  # the exchange's own "statistics as of" date for these prices
         if day and (force_eod or session_over) and not db.kv_get("eod:" + day):
             n = history.record_day(day, snap["stocks"])
-            history.record_indices(day, snap["indices"])
+            if snap.get("stats_as_of"):
+                history.record_indices(snap["stats_as_of"], snap["indices"])
             db.kv_set("eod:" + day, str(n), datetime.now(timezone.utc).isoformat())
             state["last_eod"] = day
             log(f"recorded {n} closes for {day}")

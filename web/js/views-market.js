@@ -38,12 +38,12 @@ export async function dashboard(main) {
     $("#idx").innerHTML = ["NASI", "N20I", "N25I", "NBSI"].filter(k => idx[k]).map(k => `
       <div class="stat"><div class="k">${esc(idx[k].name)}</div><div class="v num">${num(idx[k].value)}</div>
       <div class="d num">${deltaAbs(idx[k].change)} &nbsp;${delta(idx[k].change_pct)}</div>
-      <div class="s">${esc(idx[k].source || "nse.co.ke")}</div></div>`).join("");
+      <div class="s">${esc(idx[k].source || "nse.co.ke")}${d.stats_as_of && !idx[k].source ? " · as of " + esc(fmtDate(d.stats_as_of)) : ""}</div></div>`).join("");
     $("#stats").innerHTML = `
       <div class="stat"><div class="k">Total market cap</div><div class="v num">${kes(d.total_market_cap)}</div><div class="s">${esc(d.market_cap_coverage)} (stockanalysis.com)</div></div>
       <div class="stat"><div class="k">Equity turnover</div><div class="v num">${kes(d.equity_turnover)}</div>
-        <div class="d">${isNum(d.equity_turnover_prev) && d.equity_turnover_prev ? delta(d.equity_turnover / d.equity_turnover_prev - 1, 1) + ' <span class="tiny muted">vs previous session</span>' : ""}</div><div class="s">nse.co.ke</div></div>
-      <div class="stat"><div class="k">Shares traded</div><div class="v num">${vol(d.shares_traded)}</div><div class="s">nse.co.ke</div></div>
+        <div class="d">${isNum(d.equity_turnover_prev) && d.equity_turnover_prev ? delta(d.equity_turnover / d.equity_turnover_prev - 1, 1) + ' <span class="tiny muted">vs previous session</span>' : ""}</div><div class="s">nse.co.ke${d.stats_as_of ? " · as of " + esc(fmtDate(d.stats_as_of)) : ""}</div></div>
+      <div class="stat"><div class="k">Shares traded</div><div class="v num">${vol(d.shares_traded)}</div><div class="s">nse.co.ke${d.stats_as_of ? " · as of " + esc(fmtDate(d.stats_as_of)) : ""}</div></div>
       <div class="stat"><div class="k">Breadth</div><div class="v num"><span class="up">▲${d.advancers}</span> <span class="down">▼${d.decliners}</span></div>
         <div class="s">${d.unchanged} unchanged · ${d.not_traded} not traded</div></div>`;
     const list = (el, rows, f) => $(el).innerHTML = rows.length ? rows.map(s => `<div class="item" data-s="${s.symbol}">

@@ -258,8 +258,10 @@ def exchange_stats():
 
 
 def _prev(entry):
-    # nse.co.ke shows the previous session's figure beside today's for volume/turnover
-    return entry.get("change") if entry else None
+    # nse.co.ke prints each figure with its change from the previous session beside it
+    if not entry or entry.get("value") is None or entry.get("change") is None:
+        return None
+    return entry["value"] - entry["change"]
 
 
 # ---------- market capitalisation ----------
@@ -453,6 +455,9 @@ def market_snapshot():
         "data_status": "delayed" if status["state"] == "open" else "end-of-day",
         "as_of": pl.get("as_of") or ex.get("as_of") or last_trading_day(),
         "prices_source": pl["source"], "prices_time": pl.get("source_time"),
+        # nse.co.ke updates its statistics block later than the price feed, so the index
+        # and turnover figures carry their own date
+        "stats_as_of": ex.get("as_of"),
         "fetched_at": now_eat().isoformat(timespec="seconds"),
         "indices": idx,
         "total_market_cap": sum(caps.values()) or None,
